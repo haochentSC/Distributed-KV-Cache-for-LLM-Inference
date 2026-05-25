@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package kvcache.v1;
+
+option go_package = "github.com/haochentSC/distributed-kv-cache/gen/kvcache/v1;kvcachev1";
+
+// KVCache stores serialized attention KV tensors keyed by an opaque 32-byte block
+// hash. The hash is computed client-side (chained SHA-256 over token IDs, ADR 0011);
+// the server treats it as opaque (ADR 0010). See docs/01-architecture.md.
+service KVCache {
+  // Lookup reports per-block presence (metadata only, NO tensor bytes). Phase 1
+  // sends one block hash; block_hashes is repeated so longest-prefix lookups are a
+  // non-breaking extension. The CLIENT assembles the longest contiguous run of
+  // present blocks starting at index 0 (ADR 0011).
+  rpc Lookup(LookupRequest) returns (LookupResponse);
+
+  // Fetch server-streams one block's KV tensor bytes in bounded chunks (ADR 0012).
+  rpc Fetch(FetchRequest) returns (stream KVChunk);
+
+  // Write client-streams one block. The FIRST message MUST be a WriteHeader; the
+  // rest are KVChunk data frames (ADR 0012).
+  rpc Write(stream WriteChunk) returns (WriteResponse);
+
+  // Evict removes a block from the cache.
+  rpc Evict(EvictRequest) returns (EvictResponse);
+
+  // Health is a liveness/readiness probe.
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+message LookupRequest {
+  string model_id = 1;             // KV cache is model-specific
+  repeated bytes block_hashes = 2; // 32-byte opaque hashes, in prefix order
+}
+
+message LookupResponse {
+  repeated BlockPresence blocks = 1; // parallel to LookupRequest.block_hashes
+}
+
+message BlockPresence {
+  bool has_entry = 1;
+  uint64 version = 2;
+  uint64 size_bytes = 3;
+}
+
+message FetchRequest {
+  string model_id = 1;
+  bytes block_hash = 2;
+  uint64 version = 3; // 0 = latest/any
+}
+
+message KVChunk {
+  bytes data = 1;
+  bool last = 2; // true on the final frame
+}
+
+message WriteChunk {
+  oneof msg {
+    WriteHeader header = 1;
+    KVChunk chunk = 2;
+  }
+}
+
+message WriteHeader {
+  string model_id = 1;
+  bytes block_hash = 2;
+  repeated int32 token_ids = 3; // for hit verification / collision guard
+  string tenant_id = 4;         // Phase 5 fairness
+  double recompute_cost = 5;    // Phase 5 cost-aware eviction
+  uint64 total_size = 6;        // total tensor bytes that will follow
+}
+
+message WriteResponse {
+  uint64 version = 1;
+  bool stored = 2;
+}
+
+message EvictRequest {
+  string model_id = 1;
+  bytes block_hash = 2;
+}
+
+message EvictResponse {
+  bool evicted = 1;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ok = 1;
+}

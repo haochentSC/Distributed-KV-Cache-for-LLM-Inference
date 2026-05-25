@@ -1,0 +1,41 @@
+#!/bin/sh
+# Project pre-commit hook. Enforced via: git config core.hooksPath .githooks
+# Runs Go formatting, vetting, and the race-detector test suite.
+# No-op (exit 0) until Go code exists, so it's safe from Phase 0.
+
+set -e
+
+# Any staged Go files?
+staged_go="$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)"
+
+if [ -z "$staged_go" ]; then
+  # Nothing Go to check (Phase 0). Pass.
+  exit 0
+fi
+
+if ! command -v go >/dev/null 2>&1; then
+  echo "pre-commit: Go files are staged but 'go' is not installed." >&2
+  exit 1
+fi
+
+echo "pre-commit: gofmt..."
+unformatted="$(gofmt -l $staged_go || true)"
+if [ -n "$unformatted" ]; then
+  echo "pre-commit: these files are not gofmt-formatted:" >&2
+  echo "$unformatted" >&2
+  echo "Run: gofmt -w <files>" >&2
+  exit 1
+fi
+
+echo "pre-commit: go vet..."
+go vet ./...
+
+echo "pre-commit: go test -race..."
+if go test -c -race -o /dev/null ./internal/cache 2>/dev/null; then
+  go test ./... -race
+else
+  echo "pre-commit: race detector unavailable on this toolchain; running go test without -race" >&2
+  go test ./...
+fi
+
+echo "pre-commit: OK"

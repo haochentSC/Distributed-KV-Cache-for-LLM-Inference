@@ -1,0 +1,27 @@
+# Go
+/bin/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars        # may contain secrets; commit *.tfvars.example instead
+crash.log
+
+# Python (vLLM connector)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
+
+# Local Claude settings (keep shared settings.json, ignore personal overrides)
+.claude/settings.local.json

@@ -105,15 +105,15 @@ func (w workload) run(rng *rand.Rand, n int) result {
 	res := result{latencies: make([]time.Duration, 0, n)}
 	payload := make([]byte, w.payloadBytes) // reused per worker; contents irrelevant
 	for i := 0; i < n; i++ {
-		hashes := blockhash.Chain(w.model, w.buildTokens(rng), w.blockTokens)
-		if len(hashes) == 0 {
+		blocks := blockhash.ChainBlocks(w.model, w.buildTokens(rng), w.blockTokens)
+		if len(blocks) == 0 {
 			continue
 		}
 		t0 := time.Now()
-		err := w.oneRequest(context.Background(), hashes, payload, &res)
+		err := w.oneRequest(context.Background(), blocks, payload, &res)
 		res.latencies = append(res.latencies, time.Since(t0))
 		res.requests++
-		res.blocks += len(hashes)
+		res.blocks += len(blocks)
 		if err != nil {
 			res.errors++
 		}
@@ -134,10 +134,10 @@ func (w workload) buildTokens(rng *rand.Rand) []int32 {
 	return tokens
 }
 
-func (w workload) oneRequest(ctx context.Context, hashes [][32]byte, payload []byte, res *result) error {
-	bh := make([][]byte, len(hashes))
-	for i := range hashes {
-		bh[i] = hashes[i][:]
+func (w workload) oneRequest(ctx context.Context, blocks []blockhash.Block, payload []byte, res *result) error {
+	bh := make([][]byte, len(blocks))
+	for i := range blocks {
+		bh[i] = blocks[i].Hash[:]
 	}
 	lookup, err := w.client.Lookup(ctx, &kvcachev1.LookupRequest{ModelId: w.model, BlockHashes: bh})
 	if err != nil {
@@ -151,13 +151,13 @@ func (w workload) oneRequest(ctx context.Context, hashes [][32]byte, payload []b
 	}
 
 	for i := 0; i < run; i++ { // reuse the cached prefix
-		if err := w.fetch(ctx, hashes[i]); err != nil {
+		if err := w.fetch(ctx, blocks[i]); err != nil {
 			return err
 		}
 		res.hits++
 	}
-	for i := run; i < len(hashes); i++ { // simulate prefill + store of the misses
-		if err := w.write(ctx, hashes[i], payload); err != nil {
+	for i := run; i < len(blocks); i++ { // simulate prefill + store of the misses
+		if err := w.write(ctx, blocks[i], payload); err != nil {
 			return err
 		}
 		res.writes++
@@ -165,8 +165,8 @@ func (w workload) oneRequest(ctx context.Context, hashes [][32]byte, payload []b
 	return nil
 }
 
-func (w workload) fetch(ctx context.Context, h [32]byte) error {
-	stream, err := w.client.Fetch(ctx, &kvcachev1.FetchRequest{ModelId: w.model, BlockHash: h[:]})
+func (w workload) fetch(ctx context.Context, b blockhash.Block) error {
+	stream, err := w.client.Fetch(ctx, &kvcachev1.FetchRequest{ModelId: w.model, BlockHash: b.Hash[:], TokenIds: b.TokenIDs})
 	if err != nil {
 		return err
 	}
@@ -181,12 +181,12 @@ func (w workload) fetch(ctx context.Context, h [32]byte) error {
 	}
 }
 
-func (w workload) write(ctx context.Context, h [32]byte, payload []byte) error {
+func (w workload) write(ctx context.Context, b blockhash.Block, payload []byte) error {
 	stream, err := w.client.Write(ctx)
 	if err != nil {
 		return err
 	}
-	hdr := &kvcachev1.WriteHeader{ModelId: w.model, BlockHash: h[:], TotalSize: uint64(len(payload))}
+	hdr := &kvcachev1.WriteHeader{ModelId: w.model, BlockHash: b.Hash[:], TokenIds: b.TokenIDs, TotalSize: uint64(len(payload))}
 	if err := stream.Send(&kvcachev1.WriteChunk{Msg: &kvcachev1.WriteChunk_Header{Header: hdr}}); err != nil {
 		return err
 	}

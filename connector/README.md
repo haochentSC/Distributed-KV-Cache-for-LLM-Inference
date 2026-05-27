@@ -1,14 +1,41 @@
-# vLLM connector (Python) — placeholder
+# vLLM Connector (Python)
 
-Built in **Phase 1, after Phase 0** (a local vLLM running + reading the `KVConnectorBase_V1`
-interface). It is a custom connector in this package, loaded via vLLM's dynamic connector
-mechanism — **no fork** (ADR 0008). It will:
+Phase 1 connector package for the Go KV cache. It is loaded through vLLM's dynamic
+`KVConnectorBase_V1` mechanism; the project does not fork vLLM.
 
-1. Split request token IDs into fixed-size blocks and compute chained block hashes (ADR 0011).
-2. `Lookup` per-block presence, assemble the longest contiguous run, `Fetch` the hit blocks, and
-   `Write` missed blocks after vLLM prefills them.
-3. Talk to the Go cache via the **Python** client generated from
-   [`proto/kvcache/v1/kvcache.proto`](../proto/kvcache/v1/kvcache.proto).
+## Setup
 
-Requires a GPU, so it is **not** built during the CPU-only phases. See
-`.claude/skills/vllm-integration/SKILL.md` and `docs/04-kv-cache-and-vllm.md`.
+From WSL2:
+
+```bash
+python -m pip install -e "connector[dev,vllm]"
+make proto-python
+```
+
+The generated Python client lives under `connector/src/kvcache_proto/` and is produced from the
+same proto as the Go cache server.
+
+## Dynamic Loading
+
+Use:
+
+```python
+KVTransferConfig(
+    kv_connector="DistributedKVConnector",
+    kv_role="kv_both",
+    kv_connector_module_path="kvcache_connector.connector",
+    kv_connector_extra_config={
+        "cache_addr": "localhost:50051",
+        "model_id": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+        "block_tokens": 16,
+        "deadline_ms": 500,
+        "tenant_id": "phase1",
+    },
+)
+```
+
+## Status
+
+Hashing, gRPC client calls, opaque payload framing, and benchmark wiring are implemented. The final
+vLLM pass must adapt `connector.py`'s load/save tensor-copy hooks to the exact paged KV layout of
+the installed vLLM release, then run `docs/benchmarks/phase1-ttft.md`.

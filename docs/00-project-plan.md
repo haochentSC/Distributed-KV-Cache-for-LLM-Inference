@@ -667,6 +667,10 @@ When future sessions help HC with this project, append decisions here so the nex
 | Session 2 (2026-05-24) | **ADR 0015 — KV payload as opaque framed bytes; serialization overhead a Phase 1 gate** | The project's core inequality (lookup+transfer < recompute) was an unmeasured assumption; make it a Phase 1 exit gate and keep tensor bytes out of protobuf |
 | Session 2 (2026-05-24) | **ADR 0016 — cache correctness invariant** | "Zero correctness violations" was undefined for an eventually-consistent cache; pinned it to "never serve KV mismatching the requested key/model/tokens" so chaos tests have a real assertion |
 | Session 2 (2026-05-24) | **ADR 0017 — write admission / backpressure, Proposed** | Multi-MB writes can OOM a node before eviction reacts; reject-fast above a high-water mark (a rejected write just recomputes) closes the gap |
+| Session 3 (2026-05-25) | **Phase 1 verified ~80% done; proceed to Phase 2 now** | CPU-only core (server, store, block-hash, load generator, Python support libs) complete + clean (build/vet/gofmt/plain-test pass). vLLM tensor-copy hooks + TTFT gate remain stubs but are GPU-path work, deliberately decoupled — they fold into Phase 4.5. The synthetic load generator drives all of Phase 2 without a GPU |
+| Session 3 (2026-05-25) | **Phase 2 sequence: local multi-process first, then AWS** | Build + test the ring/routing across local cache-server processes to tighten the learning loop; AWS becomes a deployment step, not a debugging surface |
+| Session 3 (2026-05-25) | **ADR 0014 ratified — prefix-affinity sharding (key on `block_hash[0]`)** | One prompt's blocks co-locate → one-RPC sub-10 ms lookups, upholding the plan's latency premise. Accept hot-shard risk; Phase 2 *measures* it via per-shard distribution; hot-prefix replication is the deferred mitigation |
+| Session 3 (2026-05-25) | **ADR 0018 — static ring membership in Phase 2; etcd deferred to Phase 3** | A fixed 2–3 node cluster has no churn, so clients build an identical ring from a static config; etcd's leases/watches only earn their keep at Phase 3 failover. Keeps Phase 2 focused (ship sharding before adding consensus) |
 
 ---
 

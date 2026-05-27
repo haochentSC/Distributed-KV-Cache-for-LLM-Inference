@@ -4,6 +4,7 @@ package server
 import (
 	"context"
 	"io"
+	"slices"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -58,8 +59,8 @@ func (s *Server) Lookup(ctx context.Context, req *kvcachev1.LookupRequest) (*kvc
 }
 
 // Fetch server-streams a block's KV bytes in bounded chunks, terminating with
-// Last=true. Returns NotFound on a miss or a version mismatch. The store's model check
-// upholds the correctness invariant (ADR 0016); the block hash itself binds the tokens.
+// Last=true. Returns NotFound on a miss, version mismatch, or token verification
+// mismatch. The model + optional token checks uphold ADR 0016; block_hash stays opaque.
 func (s *Server) Fetch(req *kvcachev1.FetchRequest, stream kvcachev1.KVCache_FetchServer) error {
 	h, ok := toBlockHash(req.GetBlockHash())
 	if !ok {
@@ -71,6 +72,9 @@ func (s *Server) Fetch(req *kvcachev1.FetchRequest, stream kvcachev1.KVCache_Fet
 	}
 	if v := req.GetVersion(); v != 0 && v != e.Version {
 		return status.Error(codes.NotFound, "requested version not available")
+	}
+	if toks := req.GetTokenIds(); len(toks) > 0 && !slices.Equal(toks, e.TokenIDs) {
+		return status.Error(codes.NotFound, "token_ids do not match cached block")
 	}
 
 	data := e.KV // immutable snapshot — safe to stream without holding a lock

@@ -6,7 +6,7 @@ cost-aware + fair eviction), integrated with vLLM and deployed on AWS via Terraf
 
 **Source of truth:** [`docs/00-project-plan.md`](docs/00-project-plan.md) — strategy, phases,
 decisions log. Don't duplicate it here. Decisions are recorded as ADRs in `docs/adr/`.
-**Current phase: Phase 0 (Foundation).**
+**Current phase: Phase 1 (single-node external cache, in progress).**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->

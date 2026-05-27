@@ -47,6 +47,7 @@ message FetchRequest {
   string model_id = 1;
   bytes block_hash = 2;
   uint64 version = 3; // 0 = latest/any
+  repeated int32 token_ids = 4; // optional hit verification / collision guard
 }
 
 message KVChunk {

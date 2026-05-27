@@ -2,15 +2,23 @@ GOPATH_BIN := $(shell go env GOPATH)/bin
 export PATH := $(PATH):$(GOPATH_BIN)
 MODULE := github.com/haochentSC/distributed-kv-cache
 
-.PHONY: tools proto build test vet fmt run-server run-loadgen tidy
+.PHONY: tools proto proto-go proto-python build test vet fmt run-server run-loadgen tidy
 
 tools: ## install the protoc Go plugins
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
-proto: ## generate Go gRPC code from the .proto
+proto: proto-go proto-python ## generate Go and Python gRPC code from the .proto
+
+proto-go: ## generate Go gRPC code from the .proto
 	protoc --go_out=. --go_opt=module=$(MODULE) \
 	       --go-grpc_out=. --go-grpc_opt=module=$(MODULE) \
+	       proto/kvcache/v1/kvcache.proto
+
+proto-python: ## generate Python gRPC code from the .proto
+	python -m grpc_tools.protoc -Iproto \
+	       --python_out=connector/src/kvcache_proto \
+	       --grpc_python_out=connector/src/kvcache_proto \
 	       proto/kvcache/v1/kvcache.proto
 
 tidy: ## sync go.mod/go.sum

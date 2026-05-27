@@ -54,6 +54,31 @@ func TestChain_Deterministic(t *testing.T) {
 	}
 }
 
+func TestChainBlocks_BindsHashToCopiedTokenBlock(t *testing.T) {
+	toks := []int32{10, 20, 30, 40, 50, 60, 70, 80}
+	blocks := ChainBlocks("m", toks, bt)
+	hashes := Chain("m", toks, bt)
+	if len(blocks) != len(hashes) {
+		t.Fatalf("ChainBlocks length = %d, Chain length = %d", len(blocks), len(hashes))
+	}
+	for i := range blocks {
+		if blocks[i].Hash != hashes[i] {
+			t.Fatalf("block %d hash mismatch", i)
+		}
+		want := toks[i*bt : (i+1)*bt]
+		for j := range want {
+			if blocks[i].TokenIDs[j] != want[j] {
+				t.Fatalf("block %d token %d = %d, want %d", i, j, blocks[i].TokenIDs[j], want[j])
+			}
+		}
+	}
+
+	toks[0] = 999
+	if blocks[0].TokenIDs[0] != 10 {
+		t.Fatal("ChainBlocks must copy token IDs instead of aliasing caller input")
+	}
+}
+
 func TestChain_TooFewTokens(t *testing.T) {
 	if Chain("m", []int32{1, 2, 3}, bt) != nil {
 		t.Fatal("fewer than one full block must return nil")

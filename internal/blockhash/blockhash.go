@@ -14,6 +14,12 @@ import (
 // while making collisions impossible across models.
 const seedPrefix = "kvcache/v1\x00"
 
+// Block binds one full token block to the opaque hash derived from it.
+type Block struct {
+	Hash     [32]byte
+	TokenIDs []int32
+}
+
 // Chain returns one 32-byte hash per FULL block of the token sequence:
 //
 //	seed          = SHA256( "kvcache/v1\x00" || modelID )
@@ -26,24 +32,40 @@ const seedPrefix = "kvcache/v1\x00"
 // identical hashes until they diverge, which is what makes longest-prefix matching
 // work. Returns nil if blockTokens <= 0 or there isn't even one full block.
 func Chain(modelID string, tokenIDs []int32, blockTokens int) [][32]byte {
+	blocks := ChainBlocks(modelID, tokenIDs, blockTokens)
+	if blocks == nil {
+		return nil
+	}
+	hashes := make([][32]byte, len(blocks))
+	for i := range blocks {
+		hashes[i] = blocks[i].Hash
+	}
+	return hashes
+}
+
+// ChainBlocks is Chain plus the exact token IDs covered by each hash. The token
+// slices are copied, so callers can safely mutate the input token buffer afterward.
+func ChainBlocks(modelID string, tokenIDs []int32, blockTokens int) []Block {
 	if blockTokens <= 0 || len(tokenIDs) < blockTokens {
 		return nil
 	}
 	numBlocks := len(tokenIDs) / blockTokens
 
 	prev := sha256.Sum256([]byte(seedPrefix + modelID))
-	hashes := make([][32]byte, 0, numBlocks)
+	blocks := make([]Block, 0, numBlocks)
 
 	buf := make([]byte, sha256.Size+blockTokens*4) // reused each block: prev || tokens
 	for b := 0; b < numBlocks; b++ {
 		copy(buf[:sha256.Size], prev[:])
 		off := sha256.Size
-		for _, tok := range tokenIDs[b*blockTokens : (b+1)*blockTokens] {
+		toks := tokenIDs[b*blockTokens : (b+1)*blockTokens]
+		for _, tok := range toks {
 			binary.LittleEndian.PutUint32(buf[off:], uint32(tok))
 			off += 4
 		}
 		prev = sha256.Sum256(buf)
-		hashes = append(hashes, prev)
+		blockTokensCopy := append([]int32(nil), toks...)
+		blocks = append(blocks, Block{Hash: prev, TokenIDs: blockTokensCopy})
 	}
-	return hashes
+	return blocks
 }

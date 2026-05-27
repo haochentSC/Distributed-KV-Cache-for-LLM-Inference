@@ -11,7 +11,13 @@
 // distributed-systems-in-go skill's consistent-hashing notes.
 package ring
 
-import "sync"
+import (
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
+	"sort"
+	"sync"
+)
 
 // Ring is a consistent-hash ring. It is safe for concurrent use: reads
 // (Lookup/Nodes) take the read lock, mutations (Add/Remove) take the write lock.
@@ -34,6 +40,13 @@ type vpoint struct {
 // If vnodes <= 0, callers should treat that as a programming error; pick a sane
 // floor or panic — your call to make in review.
 func New(vnodes int) *Ring {
+	// vnodes <= 0 is a programming error (an unparsed flag, a zero config). Fail loud
+	// here rather than silently building a ring that owns nothing — a clamped default
+	// would hide the misconfiguration. (Constructors panicking on invalid args is fine
+	// in Go; it's a bug-in-caller signal, not a runtime condition to handle.)
+	if vnodes <= 0 {
+		panic(fmt.Sprintf("ring.New: vnodes must be > 0, got %d", vnodes))
+	}
 	return &Ring{
 		vnodes:  vnodes,
 		members: make(map[string]struct{}),
@@ -46,11 +59,16 @@ func New(vnodes int) *Ring {
 func (r *Ring) Add(node string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// TODO(hc):
-	//   1. if node already in r.members, return.
-	//   2. for i in [0, r.vnodes): append vpoint{hash: vnodeHash(node, i), node: node}.
-	//   3. re-sort r.points by hash ascending (sort.Slice), and record the member.
-	// Keeping points sorted here is what lets Lookup binary-search.
+	if _, ok := r.members[node]; ok {
+		return // idempotent: the Phase 3 etcd watch may replay membership
+	}
+	for i := 0; i < r.vnodes; i++ {
+		r.points = append(r.points, vpoint{hash: vnodeHash(node, i), node: node})
+	}
+	// Re-sort the whole circle so Lookup can binary-search. sort.Slice takes a "less"
+	// closure; ascending by hash is the invariant every other method relies on.
+	sort.Slice(r.points, func(i, j int) bool { return r.points[i].hash < r.points[j].hash })
+	r.members[node] = struct{}{}
 }
 
 // Remove deletes node and all of its virtual points, preserving sorted order.
@@ -58,11 +76,21 @@ func (r *Ring) Add(node string) {
 func (r *Ring) Remove(node string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	// TODO(hc):
-	//   1. if node not in r.members, return.
-	//   2. rebuild r.points keeping only points whose .node != node
-	//      (filtering preserves the existing sorted order — no re-sort needed).
-	//   3. delete(r.members, node).
+	if _, ok := r.members[node]; !ok {
+		return // idempotent
+	}
+	// In-place filter: a common Go idiom. kept aliases r.points' backing array, but we
+	// only ever write at an index <= the read index, so it's safe. Filtering keeps the
+	// surviving points in their existing order, so no re-sort is needed (vpoint is a
+	// value type — no dangling pointers left in the truncated tail).
+	kept := r.points[:0]
+	for _, p := range r.points {
+		if p.node != node {
+			kept = append(kept, p)
+		}
+	}
+	r.points = kept
+	delete(r.members, node)
 }
 
 // Lookup returns the node that owns key — the node of the first virtual point at or
@@ -73,30 +101,53 @@ func (r *Ring) Remove(node string) {
 func (r *Ring) Lookup(key []byte) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	// TODO(hc):
-	//   1. if len(r.points) == 0, return "".
-	//   2. h := first 8 bytes of key as a uint64 (guard len(key) < 8).
-	//   3. idx := sort.Search(len(r.points), func(i) bool { return r.points[i].hash >= h }).
-	//   4. if idx == len(r.points), wrap to 0 (clockwise past the top of the circle).
-	//   5. return r.points[idx].node.
-	panic("TODO(hc): implement Ring.Lookup")
+	if len(r.points) == 0 {
+		return ""
+	}
+	// Real keys are 32-byte SHA-256 roots, so key[:8] is uniform. The short-key branch
+	// is just a guard so a malformed key can't panic the read path.
+	var h uint64
+	if len(key) >= 8 {
+		h = binary.BigEndian.Uint64(key[:8])
+	} else {
+		var b [8]byte
+		copy(b[:], key)
+		h = binary.BigEndian.Uint64(b[:])
+	}
+	// sort.Search returns the smallest index i where points[i].hash >= h. If none
+	// qualifies (h is past the largest point), it returns len(points) and we wrap to 0 —
+	// that's the "clockwise past the top of the circle" step.
+	idx := sort.Search(len(r.points), func(i int) bool { return r.points[i].hash >= h })
+	if idx == len(r.points) {
+		idx = 0
+	}
+	return r.points[idx].node
 }
 
 // Nodes returns the current physical node IDs in no particular order.
 func (r *Ring) Nodes() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	// TODO(hc): collect and return the keys of r.members.
-	panic("TODO(hc): implement Ring.Nodes")
+	out := make([]string, 0, len(r.members))
+	for n := range r.members { // map iteration order is randomized in Go — hence "no particular order"
+		out = append(out, n)
+	}
+	return out
 }
 
 // vnodeHash maps a virtual-node label to a position on the circle. The label must be
 // stable and unique per (node, i) so every process builds an identical ring from the
 // same member set (clients must agree — see 2c).
 //
-// TODO(hc): pick a hash. hash/fnv (fnv.New64a over fmt.Sprintf("%s#%d", node, i)) is
-// the simplest; crypto/sha256 of the label, first 8 bytes, is also fine. Avoid
-// maphash here — its seed is process-random, which would make rings disagree.
+// vnodeHash must be (a) deterministic across processes — every client builds an identical
+// ring from the same member set (ADR 0018 static membership), so maphash's per-process
+// random seed is out — and (b) well-distributed, so the vnodes spread evenly and each node
+// owns ≈1/N of the circle. We first tried fnv-1a here; TestDistribution caught it clustering
+// badly (one node owned ~41%, another ~11% over 4 nodes / 128 vnodes), because fnv has weak
+// avalanche on short, near-identical labels like "n3#0".."n3#127". sha256's first 8 bytes
+// fix it (it's what the block-hash chain already uses) and the cost is negligible — this
+// runs only on Add/Remove, never on the Lookup hot path.
 func vnodeHash(node string, i int) uint64 {
-	panic("TODO(hc): implement vnodeHash")
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s#%d", node, i)))
+	return binary.BigEndian.Uint64(sum[:8])
 }

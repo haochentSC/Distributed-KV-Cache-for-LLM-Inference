@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "distributed-kv-cache-connector"
+version = "0.1.0"
+description = "vLLM KVConnectorBase_V1 adapter for the distributed KV cache project"
+requires-python = ">=3.10"
+dependencies = [
+  "grpcio>=1.80",
+  "protobuf>=6.31.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "grpcio-tools>=1.80",
+  "pytest>=8",
+]
+vllm = [
+  "torch",
+  "vllm",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "src/kvcache_proto"]

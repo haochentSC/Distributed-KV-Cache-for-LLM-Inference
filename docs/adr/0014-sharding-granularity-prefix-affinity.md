@@ -1,7 +1,7 @@
 # ADR 0014 — Sharding granularity: prefix-affinity vs. per-block hashing
 
-- **Status:** proposed (decide at Phase 2 start, with HC)
-- **Date:** 2026-05-24 (architecture review, Session 2)
+- **Status:** accepted (ratified at Phase 2 start, 2026-05-25)
+- **Date:** 2026-05-24 (proposed, architecture review Session 2); 2026-05-25 (ratified)
 - **Deciders:** HC (+ Claude)
 
 ## Context
@@ -19,13 +19,15 @@ This quietly contradicts the plan's "sub-10 ms lookup, faster than recompute" pr
 This is cheap to decide now and painful to change after Phase 2 ships, so we capture the fork here
 rather than defaulting silently. See `docs/01-architecture-overview.md` §7.
 
-## Decision (proposed — not yet ratified)
+## Decision (ratified 2026-05-25)
 
-**Recommended:** shard with **prefix affinity** — route by a coarse prefix root (e.g. the first
-block hash, or the first K tokens' hash), so all blocks of prompts sharing that root live on **one
-shard**. A prefix lookup becomes one shard / one RPC. Pair it with **hot-prefix replication** to
-contain the load-imbalance cost (see Alternatives). Final call deferred to Phase 2 start with HC,
-since this is core distributed-systems design (guided), not a scaffold decision.
+Shard with **prefix affinity**: route by a coarse **prefix root** — concretely **`block_hash[0]`**,
+the first block's chained hash (already the documented routing key in `internal/ring/ring.go`) — so
+all blocks of prompts sharing that root live on **one shard**. A prefix lookup becomes one shard /
+one RPC. Hot-prefix replication is the deferred mitigation for the load-imbalance cost (see
+Alternatives); it is **not** built in Phase 2 — Phase 2 instead *measures* the hot-shard effect via
+the load generator's per-shard distribution report, which is the data that justifies adding
+replication later.
 
 ## Alternatives considered
 

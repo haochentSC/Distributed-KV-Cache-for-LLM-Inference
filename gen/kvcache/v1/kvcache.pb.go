@@ -181,7 +181,8 @@ type FetchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ModelId       string                 `protobuf:"bytes,1,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
 	BlockHash     []byte                 `protobuf:"bytes,2,opt,name=block_hash,json=blockHash,proto3" json:"block_hash,omitempty"`
-	Version       uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"` // 0 = latest/any
+	Version       uint64                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`                          // 0 = latest/any
+	TokenIds      []int32                `protobuf:"varint,4,rep,packed,name=token_ids,json=tokenIds,proto3" json:"token_ids,omitempty"` // optional hit verification / collision guard
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -235,6 +236,13 @@ func (x *FetchRequest) GetVersion() uint64 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *FetchRequest) GetTokenIds() []int32 {
+	if x != nil {
+		return x.TokenIds
+	}
+	return nil
 }
 
 type KVChunk struct {
@@ -698,12 +706,13 @@ const file_proto_kvcache_v1_kvcache_proto_rawDesc = "" +
 	"\thas_entry\x18\x01 \x01(\bR\bhasEntry\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x03 \x01(\x04R\tsizeBytes\"b\n" +
+	"size_bytes\x18\x03 \x01(\x04R\tsizeBytes\"\x7f\n" +
 	"\fFetchRequest\x12\x19\n" +
 	"\bmodel_id\x18\x01 \x01(\tR\amodelId\x12\x1d\n" +
 	"\n" +
 	"block_hash\x18\x02 \x01(\fR\tblockHash\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x04R\aversion\"1\n" +
+	"\aversion\x18\x03 \x01(\x04R\aversion\x12\x1b\n" +
+	"\ttoken_ids\x18\x04 \x03(\x05R\btokenIds\"1\n" +
 	"\aKVChunk\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x12\n" +
 	"\x04last\x18\x02 \x01(\bR\x04last\"s\n" +

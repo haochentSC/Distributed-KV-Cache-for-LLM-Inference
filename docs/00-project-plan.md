@@ -298,20 +298,36 @@ Total: **core v1 is 15–20 weeks** at ~15 hours/week (Phases 0–4, the shippab
   the tensor), and **`lookup + fetch ≪ recompute` is a Phase 1 exit gate** — measure it before
   declaring Phase 1 done, not under chaos in Phase 4.
 
-### Phase 2 — Two-Node Distributed Cache on AWS (Weeks 6–9)
+### Phase 2 — Two-Node Distributed Cache (local-first, then AWS) (Weeks 6–9)
 
-**Goal:** Add a second cache node and shard between them — and move onto real cloud now, not later.
+**Goal:** Add a second cache node and shard between them with a consistent-hash ring + client-side
+routing — proven locally first, then deployed to AWS.
 
-- **Write the cluster as Terraform:** a VPC with subnets and security groups, two CPU cache instances (EC2), and an etcd instance, all in one AZ for low-latency gRPC. Cache nodes can run on Spot. Push the cache image to ECR. Use an S3 bucket (+ DynamoDB lock) as the Terraform remote state backend.
-- Stand up etcd for metadata (on-demand, 3-node recommended — Revision C)
-- Implement consistent hashing to route between the two shards — **but first decide sharding
-  granularity: prefix-affinity vs. per-block (ADR 0014).** Per-block scatters a prefix across shards
-  (fan-out latency); affinity co-locates it (hot-shard risk). This is the locality-vs-balance
-  tradeoff and is cheap to settle now, painful after Phase 2 ships.
-- Implement the shard-routing logic in the shared client (recall there are **two** generated clients — Go for the load generator, Python for the vLLM connector — both consuming the same routing rules; Revision D) so a caller can look up which shard owns a given prefix hash
+> **Revision F (2026-05-25, Session 3).** Three refinements ratified at Phase 2 start: **(1) Sequence
+> — local-first.** Build and test the ring + routing across **local multi-process** cache nodes
+> first, *then* `terraform apply` the same thing to AWS; this tightens the learning loop and makes
+> AWS a deployment step, not a debugging surface. **(2) etcd deferred to Phase 3 (ADR 0018).** A fixed
+> 2–3 node cluster has no membership churn, so every client builds an identical ring from a **static**
+> member list; etcd's leases/watches only earn their keep at Phase 3 failover. **(3) Sharding
+> granularity decided — prefix-affinity (ADR 0014 accepted),** keyed on `block_hash[0]`.
+
+- **Local first:** run 2–3 `cache-server` processes; route between them with the ring (below) and the
+  synthetic load generator. Prove sharding works before any cloud spend.
+- Implement consistent hashing to route between the shards — **decided: prefix-affinity, keyed on a
+  prefix root (`block_hash[0]`) (ADR 0014).** Affinity co-locates a prompt's blocks on one shard
+  (one-RPC, sub-10 ms lookups) at the cost of hot-shard risk for viral prefixes; per-block hashing
+  was rejected because it scatters a prefix across shards (fan-out latency). Phase 2 *measures* the
+  hot-shard effect (load-gen per-shard distribution); hot-prefix replication is the deferred mitigation.
+- Implement the shard-routing logic in the shared client (recall there are **two** generated clients — Go for the load generator, Python for the vLLM connector — both consuming the same routing rules; Revision D) so a caller can look up which shard owns a given prefix root. The member set comes from static config in Phase 2, behind a small seam an etcd watch replaces in Phase 3.
 - Handle the case where a prefix should be on shard A but A is unreachable (return cache miss, log it)
+- **Then to AWS:** write the cluster as Terraform — a VPC with subnets and security groups, two CPU
+  cache instances (EC2 Spot), all in one AZ for low-latency gRPC. Push the cache image to ECR. Use an
+  S3 bucket (+ DynamoDB lock) as the Terraform remote-state backend. **(etcd is *not* provisioned
+  here — it lands in Phase 3 per ADR 0018.)**
 - Drive the whole thing with the synthetic load generator — **no GPU needed for this phase**
-- **Deliverable:** Two-node distributed cache running on AWS via `terraform apply`, with consistent hashing; benchmark (synthetic load) shows cache works across both nodes
+- **Deliverable:** A 2–3 node distributed cache with consistent hashing — proven locally, then running
+  on AWS via `terraform apply`; benchmark (synthetic load) shows the cache works across all nodes and
+  reports per-shard distribution.
 
 ### Phase 3 — Replication and Failure Handling (Weeks 10–12)
 
@@ -671,6 +687,8 @@ When future sessions help HC with this project, append decisions here so the nex
 | Session 3 (2026-05-25) | **Phase 2 sequence: local multi-process first, then AWS** | Build + test the ring/routing across local cache-server processes to tighten the learning loop; AWS becomes a deployment step, not a debugging surface |
 | Session 3 (2026-05-25) | **ADR 0014 ratified — prefix-affinity sharding (key on `block_hash[0]`)** | One prompt's blocks co-locate → one-RPC sub-10 ms lookups, upholding the plan's latency premise. Accept hot-shard risk; Phase 2 *measures* it via per-shard distribution; hot-prefix replication is the deferred mitigation |
 | Session 3 (2026-05-25) | **ADR 0018 — static ring membership in Phase 2; etcd deferred to Phase 3** | A fixed 2–3 node cluster has no churn, so clients build an identical ring from a static config; etcd's leases/watches only earn their keep at Phase 3 failover. Keeps Phase 2 focused (ship sharding before adding consensus) |
+| Session 4 (2026-05-27) | **ADR 0019 — client-side routing layer (`internal/cluster`); `SetMembers` member seam. Phase 2 complete** | The ring had no consumer; added a smart-client router (ring + conn pool) wired into the load generator. Chose `Router.SetMembers([]Member)` pushed by a driver (static now, etcd watch in Phase 3) over a pull interface — keeps all mutation/locking in one place so the etcd swap changes no routing code. Live 3-shard run reports per-shard distribution (hot shard ~87% at prefix-share 0.8), taking ADR 0014's deferred measurement |
+| Session 4 (2026-05-27) | **ADR 0020 — etcd membership (Sub-stage A): lease-bound `/kvcache/members/`, membership-only** | First etcd slice. Nodes self-register under a lease+keepalive (crash → lease lapses → ring removal; graceful → revoke); clients watch the prefix (Get revision+1 to avoid gaps) and feed full snapshots to the same `SetMembers` seam. No `/kvcache/ring/*` — ring is deterministic from members (ADR 0018). Verified live: 3 servers self-register, loadgen with only `-etcd` discovers them and reproduces the static distribution exactly. Lease TTL is the split-brain knob for Sub-stage C |
 
 ---
 
@@ -686,3 +704,32 @@ If you're a Claude session being asked to help with this project, before answeri
 6. **When suggesting code, default to Go** unless HC has stated otherwise.
 
 Future sessions can append new sections (a Section 12, 13, etc.) for ongoing work — implementation notes, debugging stories, post-mortems. Keep this document as the living source of truth.
+
+---
+
+## Section 12 — Phase 3 Sub-stage Tracker (live status)
+
+Phase 3 (§4 "Replication and Failure Handling") was broken into sub-stages in Session 4 (2026-05-27).
+A blocking finding opened it: Phase 2's ring had **no consumer** (loadgen dialed a single addr), so
+routing had to be finished first as "Step 0". Sequencing decisions this session: **local-first then
+AWS**, and **distributed core first, infra (IAM + S3) second**. Each sub-stage follows the CLAUDE.md
+guided loop and ends with an ADR. Detailed plan: `~/.claude/plans/` (this machine) — summarized here so
+it survives a session switch.
+
+| # | Sub-stage | Status | ADR | Notes |
+|---|---|---|---|---|
+| 0 | **Finish Phase 2 client routing** | ✅ done | 0019 | `internal/cluster` smart-client router (ring + conn pool); `SetMembers` seam; degrade-to-miss; loadgen `-members` + per-shard distribution. Live 3-shard run: hot shard ~87% at prefix-share 0.8 (ADR 0014 measurement). |
+| A | **etcd membership + ownership** | ✅ done | 0020 | `internal/coord`: `Register` (lease+keepalive+revoke), `WatchMembers` (Get rev+1 → full snapshots → `SetMembers`). `cache-server` self-registers (`-etcd/-advertise/-node-id/-lease-ttl`); loadgen discovers via `-etcd`. Membership-only schema (ring recomputed, ADR 0018). Verified live vs Docker etcd. |
+| B | **RF=2 async replication** | ⬜ not started | (0021 planned) | Extend ring with `LookupN(key,n)` → primary + replica. Additive `Replicate` RPC. Primary acks client, then async ships to replica; replica applies via `Store.Put`; replica-lag backpressure. Open: log format, version reconciliation, may `Fetch` serve from a replica. |
+| C | **Leader election + failover/promotion** | ⬜ not started | (0022 planned) | etcd lease on `/kvcache/leader/shard-<k>`; replica promotes on lease lapse (data already present via B, so **no `Handoff` RPC** — re-warm gaps on miss). Split-brain knob: **lease TTL < partition-detection window** (the §A 10s TTL feeds this); fresh-lease-before-write guard; old-primary reconciliation by version. |
+| D | **Graceful drain + Spot interruption** | ⬜ not started | — | On SIGTERM: deregister from etcd first (release lease so clients stop routing + replica promotes), drain in-flight, then `GracefulStop`. The release-before-stop ordering is already in `cmd/cache-server/main.go`; add an AWS Spot-interruption poller (`169.254.169.254/.../spot/instance-action`) triggering the same path. |
+| E | **AWS infra: etcd 3-node + Spot nodes + IAM + S3 cold tier** | ⬜ not started | — | Terraform: VPC/subnets/SGs single-AZ; **3-node on-demand etcd** (ADR 0009, never Spot); Spot cache nodes; ECR; S3 + DynamoDB remote state. IAM roles/instance profiles (no static creds). S3 cold tier: spill-on-evict + `Fetch` read-through. Wire D's Spot poller to the live cluster. Use the `cloud-deploy-aws` skill; never auto-`apply`. |
+
+**Cross-cutting carryover:**
+- **`-race` debt:** the Windows box can't run `go test -race` (32-bit MinGW cgo). Routing + the etcd
+  watch goroutine still need one WSL2 `-race` pass before the Phase-4 chaos suite.
+- **Local etcd:** single-node `kvc-etcd` Docker container on `localhost:2379` (image
+  `quay.io/coreos/etcd:v3.5.17`, matches the Go client dep). Sub-stages B/C reuse it.
+- **Exit invariant for the phase (ADR 0016):** under node kill / Spot reclaim, never serve KV that
+  mismatches the requested `(block_hash, model_id, token_ids)`; misses are fine. This is the assertion
+  the failover and (Phase 4) chaos tests must hold.

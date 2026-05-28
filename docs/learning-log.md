@@ -16,7 +16,108 @@
 
 ---
 
+## Phase 3 - Replication, failover & etcd coordination
+
+### 2026-05-28 - RF=2 + implicit promotion + Spot drain: Phase 3 collapses into one mechanism
+**Phase:** 3 (Sub-stages B, C, D)
+**What I was doing:** Closed out Phase 3 in one pass — RF=2 async replication (ADR 0021),
+implicit promotion via ring rotation (ADR 0022), graceful drain wired to Spot (ADR 0023). The
+guided cores landed: `ring.LookupN` (distinct-node clockwise walk), `Store.PutWithVersion`
+(version-guarded, stale-drop), `Router.OwnerConns` (ordered read failover), the `Replicator`
+(bounded queue, drop-under-pressure, primary→replica `Replicate` RPC), the `Write` enqueue
+hook, loadgen routing_key + read failover, `internal/spot` IMDS watcher.
+**What I learned / what broke:**
+- **The big insight: Sub-stage C is "no code."** Classical distributed-systems training points
+  at leader election for failover — a per-shard etcd lease, an "I am primary now" handshake. We
+  didn't need any of it. The deterministic ring (ADR 0018) + replica deterministically placed at
+  `LookupN[1]` (ADR 0021) + lease-bound membership (ADR 0020) make promotion a *property* of
+  the ring rotation: when the dead node's membership key disappears, every router recomputes,
+  and the old replica IS the new primary, with the data already on disk because we'd been
+  replicating to it. The test `TestLookupN_RebalanceOnRemove` is the executable spec.
+- **Placement key ≠ storage key.** The replication design hit a wall when I realized the primary
+  only sees individual block writes, but replica placement has to use the prompt root (because
+  read-failover keys on the root). Fix: add `routing_key` to `WriteHeader`; primary stores by
+  `block_hash` but places by `routing_key`. This is the kind of asymmetry I would not have caught
+  without thinking the failover read path through end-to-end first.
+- **Version preservation is the safety invariant.** `PutWithVersion`'s `prev.Version >= version
+  → drop` guard is what makes async replication safe under out-of-order delivery. Without it,
+  a late v2 arriving after a fresh v3 silently rolls back. Test added.
+- **Dedicated `Replicate` RPC > `is_replica` bool.** Two-meaning fields turn into Stockholm
+  syndrome in 3 months. Separate RPC also makes loop prevention a one-line "do not call
+  `s.repl.Enqueue` in Replicate" rather than a runtime flag check.
+- **One drain path, two triggers (Sub-stage D).** Spot interruption pushes onto the SAME signal
+  channel SIGTERM does, so the shutdown sequence has one implementation. Order matters:
+  revoke-lease-then-GracefulStop turns a Spot reclaim from a 10-second outage into milliseconds.
+- **Still pending:** `-race` (Windows MinGW blocker) on cluster/coord/server/spot in WSL2;
+  multi-node kill-and-verify integration test (Phase 4 chaos territory).
+**Why it matters / what I'd redo:** "What if we didn't need election?" was the question that
+saved the most code. It only worked because three earlier ADRs (0018 determinism, 0020 membership
+leases, 0021 deterministic replica placement) had each made a small choice that, combined, made
+election unnecessary. Determinism keeps paying.
+**Links:** ADRs 0021/0022/0023, `internal/ring/lookup_n_test.go`,
+`internal/cache/put_with_version_test.go`, `internal/spot/`, `internal/server/replicator.go`.
+
+### 2026-05-27 - etcd membership: leases for failure detection, watch for discovery
+**Phase:** 3 (Sub-stage A)
+**What I was doing:** Added `internal/coord` — etcd-backed cluster membership. `Register` (grant lease
+→ put key under it → keepalive → revoke on release) and `WatchMembers` (prefix Get + watch from
+revision+1, emit full snapshots) feed the existing `Router.SetMembers` seam via `DriveRouter`. Wired
+`cache-server` to self-register (`-etcd`/`-advertise`/`-node-id`/`-lease-ttl`) and the loadgen to
+discover via the watch (`-etcd`).
+**What I learned / what broke:**
+- **A lease IS the failure detector.** A node puts its membership key bound to a lease and keepalives
+  it; crash → keepalives stop → lease expires → etcd deletes the key → the watch removes it from the
+  ring. No heartbeat code of our own. Graceful shutdown `Revoke`s so the node leaves immediately
+  instead of after the TTL. (ADR 0020.)
+- **You MUST drain the KeepAlive ack channel** in a goroutine, or it back-pressures and the lease
+  silently lapses — a classic etcd-client footgun.
+- **The Get/Watch revision gap is real.** `WatchMembers` captures `resp.Header.Revision` from the
+  initial prefix Get and starts the watch at `revision+1`, so no event between the snapshot and the
+  watch is missed or replayed. Emitting the FULL member set (not deltas) matches `SetMembers`'
+  "reconcile to exactly this set" contract.
+- **The seam held.** Swapping the static `-members` driver for the etcd watch changed zero routing
+  code, and the live etcd-driven run reproduced the static run's per-shard distribution *exactly*
+  (86.8% hot shard) — proof the recomputed ring is byte-identical across clients (ADR 0018 determinism).
+- Docker Desktop's daemon wasn't running; had to start it before the integration test (which skips
+  cleanly when etcd is unreachable). `-race` on the new watch goroutine still pending WSL2.
+**Why it matters / what I'd redo:** The lease TTL I picked (10s) is not arbitrary — it's the
+failure-detection window, and I'll have to weigh it against the partition-detection window in Sub-stage
+C (the split-brain knob). Membership-only schema kept this slice small; ownership/leader keys come with
+failover. Next: RF=2 async replication (Sub-stage B).
+**Links:** ADR 0020 (membership schema), ADR 0013 (consistency boundary), ADR 0018/0019 (determinism +
+the seam), `internal/coord/`, `cmd/cache-server/`, `cmd/loadgen/`.
+
 ## Phase 2 - Two-node distributed cache
+
+### 2026-05-27 - Smart-client routing layer; affinity makes the hot shard visible
+**Phase:** 3 (Step 0 — finishes Phase 2)
+**What I was doing:** Built the client-side routing layer (`internal/cluster`) that finally *consumes*
+the ring: a `Router` wrapping the ring + a node→gRPC-conn pool, with `SetMembers` as the single
+membership-mutation seam (static driver now, etcd watch in Sub-stage A). Wired it into the load
+generator (`-members` instead of `-addr`, degrade-to-miss, per-shard distribution report) and ran a
+live 3-shard cluster.
+**What I learned / what broke:**
+- **The seam shape is a real design choice.** Chose `Router.SetMembers([]Member)` pushed by an
+  external driver over a `MemberSource` interface the router pulls from — it keeps all ring+pool
+  mutation (and locking) in one method, so swapping the static driver for an etcd watch in Phase 3
+  changes *zero* routing code. (ADR 0019.)
+- **Connection-pool concurrency:** one `RWMutex` guards the `{ring, pool}` *pair* so a reader never
+  sees a node in the ring that's missing from the pool. On member removal, remove-from-ring **then**
+  `Close()` — an in-flight RPC on the closed conn aborts into the degrade-to-miss path, which is safe
+  because a miss just recomputes (ADR 0016). `grpc.NewClient` is lazy, so dialing can't fail on an
+  unreachable host — "is it up?" is deferred to that same miss path.
+- **Affinity's hot-shard cost is now measured, not hypothetical.** At `prefix-share=0.8` one shard
+  took 86.8% of requests; the arithmetic `0.8 + 0.2/3 ≈ 0.867` matches, so the concentration is
+  exactly prefix-affinity routing the viral prefix to a single owner (ADR 0014). This is the number
+  that justifies hot-prefix replication later.
+- `-race` still blocked on this box (32-bit MinGW cgo); 6 new `cluster` tests pass under plain
+  `go test`. Needs a WSL2 `-race` pass before chaos testing.
+**Why it matters / what I'd redo:** This closes Phase 2 — sharding is provably exercised across nodes
+with a reported distribution. The routing layer is deliberately shaped so Phase 3's etcd watch is a
+driver swap, not a rewrite. Next: stand up local etcd and replace the static `SetMembers` with a
+membership watch (Sub-stage A).
+**Links:** ADR 0019 (routing layer + seam), ADR 0014 (affinity), ADR 0018 (static membership),
+`internal/cluster/`, `cmd/loadgen/`.
 
 ### 2026-05-25 - Consistent-hash ring + the hash-distribution trap
 **Phase:** 2

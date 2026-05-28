@@ -70,7 +70,7 @@ picture collapses to a single shard, no ring, no etcd, no S3** — see the [phas
 | vLLM KV connector | Python | `KVConnectorBase_V1` impl; on prefill, look up/fetch prefix KV from the cluster; on miss, write computed KV back. No vLLM fork. | Phase 1 (post-Phase-0) |
 | Client / routing lib | Go + Python | Generated gRPC client + shard routing: hash → ring → owning shard; handle unreachable shard as a miss. | Phase 1 (client), Phase 2 (routing) |
 | Cache shard | Go | The node: gRPC server, in-memory `Store`, eviction policy, replication, tier manager. | Phase 1 |
-| Metadata layer | etcd | Cluster membership, shard ownership ranges, leader leases. Linearizable. | Phase 2 |
+| Metadata layer | etcd | Cluster membership, shard ownership ranges, leader leases. Linearizable. | Phase 3 (membership built, Sub-stage A) |
 | Cold tier | S3 | Evicted-but-warm entries; benchmark artifacts; Terraform remote state. | Phase 3 |
 | Load generator | Go | GPU-free synthetic traffic with configurable payload + prefix-sharing; multi-tenant profiles for the fairness benchmark. | Phase 1 / extended Phase 5 |
 | Observability | — | Hit/miss, latency, eviction, replication-lag metrics; OTel traces; CloudWatch logs/alarms. | Phase 4 |
@@ -215,18 +215,21 @@ and it's the concrete property the Phase 4 chaos suite asserts against.
 
 ---
 
-## 7. Sharding & rebalancing `[PROPOSED — Phase 2]`
+## 7. Sharding & rebalancing `[Decided — ADR 0014; ring + routing built (ADR 0019)]`
 
 - **Consistent-hash ring** (virtual nodes on the hash space). Each shard owns arcs; adding/removing
   a node moves only `~1/N` of keys instead of reshuffling everything.
-- **Open: what do we key the ring on?** `[PROPOSED — ADR 0014]` Per-block hashing gives perfect load
-  balance but **scatters one prefix across many shards** → multi-RPC fan-out and max-over-shards
-  latency, which fights the sub-10 ms goal. **Prefix-affinity** (key on a prefix root) co-locates a
-  prompt's blocks on one shard → one-RPC lookups, at the cost of **hot shards** for viral prefixes.
-  The recommended end-state is affinity **+ hot-prefix replication** (what SGLang/Mooncake do). This
-  is the locality-vs-balance tension; ratified with HC at Phase 2 start.
-- **Ring published in etcd**; the routing lib reads/watches it. Client still does per-block presence
-  + run assembly (ADR 0011) within the owning shard.
+- **Decided: key the ring on a prefix root (`block_hash[0]`).** `[Decided — ADR 0014]` Per-block
+  hashing gives perfect load balance but **scatters one prefix across many shards** → multi-RPC
+  fan-out and max-over-shards latency, which fights the sub-10 ms goal, so it was rejected.
+  **Prefix-affinity** (key on a prefix root) co-locates a prompt's blocks on one shard → one-RPC
+  lookups, at the cost of **hot shards** for viral prefixes. The recommended end-state is affinity
+  **+ hot-prefix replication** (what SGLang/Mooncake do). Ratified 2026-05-25 (ADR 0014 accepted);
+  the implemented ring (`internal/ring`) keys on `block_hash[0]`, and Phase 2 *measures* the
+  hot-shard effect before adding replication.
+- **Phase 2: ring built from a static member list** (ADR 0018); **Phase 3: published in etcd** and
+  watched by the routing lib. Client still does per-block presence + run assembly (ADR 0011) within
+  the owning shard.
 - **Unreachable shard → treat as miss** (log it); never block the read path on a down node.
 
 _Pending your design:_ the granularity decision above (ADR 0014), vnode count, the ring data
@@ -249,7 +252,12 @@ replica-lag backpressure.
 
 ---
 
-## 9. Cluster coordination / etcd `[PROPOSED — Phase 2/3]`
+## 9. Cluster coordination / etcd `[membership built — ADR 0020; ownership/leases PROPOSED — Phase 3]`
+
+**Introduced in Phase 3 (ADR 0018):** Phase 2 built the ring from a static member list; etcd now
+provides linearizable membership (Sub-stage A, built), with ownership/leader leases following at
+failover (Sub-stages B/C). Membership is **built** per the schema below; the leader/ownership keys
+remain the Phase-3 target.
 
 etcd runs **on-demand, 3-node** `[Decided — ADR 0009]` (never Spot — it's the coordination ground
 truth, and a real quorum is what makes the split-brain story defensible).
@@ -257,9 +265,9 @@ truth, and a real quorum is what makes the split-brain story defensible).
 Proposed key layout (illustrative — names/TTLs to be set in-phase):
 
 ```
-/kvcache/members/<node-id>          -> {addr, capacity, status}   (lease-bound; gone = dead)
-/kvcache/ring/<vnode>               -> <node-id>                   (ownership; watched by clients)
-/kvcache/leader/shard-<k>           -> <node-id>                   (lease-bound primary lock)
+/kvcache/members/<node-id>          -> <addr>            BUILT (ADR 0020): lease-bound; gone = dead
+/kvcache/leader/shard-<k>           -> <node-id>         PROPOSED P3: lease-bound primary lock
+# no /kvcache/ring/* — the ring is deterministic from the member set (ADR 0018), recomputed per client
 ```
 
 Lease-based leader election: the primary holds a lease on its shard's leader key; if the lease lapses
@@ -365,7 +373,7 @@ What of this architecture exists when. **Today = Phase 1.**
 | Block-hash key + per-block presence | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | vLLM connector (no fork) | ◐* | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Consistent-hash ring + routing | | ✅ | ✅ | ✅ | ✅ | ✅ |
-| etcd (membership/ownership/leases) | | ✅ | ✅ | ✅ | ✅ | ✅ |
+| etcd (membership/ownership/leases) | | | ✅ | ✅ | ✅ | ✅ |
 | Replication RF=2 + failover | | | ✅ | ✅ | ✅ | ✅ |
 | S3 cold tier | | | ✅ | ✅ | ✅ | ✅ |
 | LRU+TTL eviction + observability + chaos | | | | ✅ | ✅ | ✅ |
@@ -373,7 +381,10 @@ What of this architecture exists when. **Today = Phase 1.**
 | Multi-objective GDSF+DRF policy + knob | | | | | | ✅ |
 
 *◐ connector slips after Phase 0 (local vLLM + GPU) is done. Phase 4 is the **core-ships gate**;
-Phase 5 is gated behind it. Full roadmap: [`02-roadmap-and-workflow.md`](./02-roadmap-and-workflow.md)
+Phase 5 is gated behind it. **Phase 2 status (2026-05-27): complete** — the consistent-hash ring
+(`internal/ring`, prefix-affinity per ADR 0014) and the client-side routing layer (`internal/cluster`,
+ADR 0019) are built; a live 3-shard run reports the per-shard distribution (hot shard ~87% at
+`prefix-share=0.8`). **etcd moved to Phase 3** (ADR 0018) — Phase 2 uses static ring membership. Full roadmap: [`02-roadmap-and-workflow.md`](./02-roadmap-and-workflow.md)
 and [`00-project-plan.md` §4](./00-project-plan.md).
 
 ---
@@ -382,9 +393,12 @@ and [`00-project-plan.md` §4](./00-project-plan.md).
 
 Everything deliberately left for HC's guided sessions, by phase:
 
-- **Phase 2 — sharding:** **granularity — prefix-affinity vs per-block (ADR 0014)**; vnode count;
-  ring data structure; key-movement on membership change (`Handoff` vs re-warm).
-- **Phase 2/3 — etcd:** exact key schema; ownership and leadership as one key or two.
+- **Phase 2 — sharding:** ~~granularity (ADR 0014)~~ **decided: prefix-affinity, key on
+  `block_hash[0]` (ADR 0014 accepted)**; vnode count (**128** in the current ring); ring data
+  structure (**sorted vpoint slice + binary search — built**); key-movement on membership change
+  (`Handoff` vs re-warm — still open).
+- **Phase 3 — etcd** (deferred from Phase 2, ADR 0018)**:** exact key schema; ownership and
+  leadership as one key or two.
 - **Phase 3 — replication/failover:** replication log format + retention; lease TTL vs
   partition-detection window; old-primary reconciliation; replica-lag backpressure; may `Fetch`
   serve from a replica?

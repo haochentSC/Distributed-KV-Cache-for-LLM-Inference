@@ -1,27 +1,100 @@
-// Command cache-server runs a single KV-cache shard over gRPC.
+// Command cache-server runs a single KV-cache shard over gRPC. When -etcd is given it
+// registers itself into cluster membership under a lease, so clients discover it via the
+// etcd watch (Sub-stage A); with -etcd empty it runs standalone (local single-node).
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 
 	kvcachev1 "github.com/haochentSC/distributed-kv-cache/gen/kvcache/v1"
 	"github.com/haochentSC/distributed-kv-cache/internal/cache"
+	"github.com/haochentSC/distributed-kv-cache/internal/cluster"
+	"github.com/haochentSC/distributed-kv-cache/internal/coord"
 	"github.com/haochentSC/distributed-kv-cache/internal/server"
+	"github.com/haochentSC/distributed-kv-cache/internal/spot"
 )
+
+// ringVnodes must match the value every client (loadgen) and peer server uses, or they'd
+// compute different rings and disagree on placement. 128 is the calibrated value (ADR 0014).
+const ringVnodes = 128
 
 func main() {
 	addr := flag.String("addr", ":50051", "gRPC listen address")
+	advertise := flag.String("advertise", "", "address clients use to reach this node (host:port); defaults to -addr")
+	etcdEndpoints := flag.String("etcd", "", "comma-separated etcd endpoints; empty = run standalone (no registration)")
+	nodeID := flag.String("node-id", "", "stable unique node id for the ring; defaults to the advertise address")
+	leaseTTL := flag.Int64("lease-ttl", 10, "etcd membership lease TTL in seconds (also the failure-detection window)")
+	rf := flag.Int("rf", 2, "replication factor: primary + (rf-1) replicas (ADR 0021); 1 disables replication")
+	spotWatch := flag.Bool("spot", false, "watch EC2 IMDS for Spot interruption and drain on notice (ADR 0023); no-op off EC2")
 	flag.Parse()
 
+	// The advertise address is what gets published to etcd; ":50051" is not dialable by a
+	// remote client, so it must carry a reachable host in a real cluster.
+	adv := *advertise
+	if adv == "" {
+		adv = *addr
+	}
+	id := *nodeID
+	if id == "" {
+		id = adv // the address doubles as the ring label, matching the static driver's convention
+	}
+
 	store := cache.NewStore(cache.NoopPolicy{})
-	srv := server.New(store)
+
+	// ctx bounds the membership watch + replicator goroutines; cancelled on shutdown.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Register into etcd membership (optional). release() deregisters by revoking the lease.
+	// With etcd configured we ALSO watch membership ourselves and run a Replicator: as the
+	// primary for the blocks routed to us, we forward each Write to its replica (ADR 0021).
+	// The server reuses the SAME cluster.Router the clients use, driven by the SAME etcd watch
+	// (coord.DriveRouter) — so server and clients agree on who the replica is.
+	var release func()
+	var repl *server.Replicator
+	if *etcdEndpoints != "" {
+		cli, err := coord.Dial(splitCSV(*etcdEndpoints), 5*time.Second)
+		if err != nil {
+			log.Fatalf("etcd dial: %v", err)
+		}
+		defer cli.Close()
+		release, err = cli.Register(ctx, id, adv, *leaseTTL)
+		if err != nil {
+			log.Fatalf("etcd register: %v", err)
+		}
+		log.Printf("registered in etcd as %q -> %q (lease ttl %ds)", id, adv, *leaseTTL)
+
+		if *rf > 1 {
+			router := cluster.New(ringVnodes)
+			defer router.Close()
+			snaps, err := cli.WatchMembers(ctx)
+			if err != nil {
+				log.Fatalf("watch members: %v", err)
+			}
+			go coord.DriveRouter(ctx, snaps, router) // keep the router's view current
+			repl = server.NewReplicator(id, *rf, router)
+			go repl.Run(ctx)
+			log.Printf("replication enabled: rf=%d, self=%q", *rf, id)
+		}
+	}
+
+	// NewWithReplicator only when replication is on; otherwise a plain single-node Server.
+	var srv *server.Server
+	if repl != nil {
+		srv = server.NewWithReplicator(store, repl)
+	} else {
+		srv = server.New(store)
+	}
 
 	gs := grpc.NewServer()
 	kvcachev1.RegisterKVCacheServer(gs, srv)
@@ -32,16 +105,44 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("kv-cache server listening on %s", *addr)
+		log.Printf("kv-cache server listening on %s (advertise %s)", *addr, adv)
 		if err := gs.Serve(lis); err != nil {
 			log.Fatalf("serve: %v", err)
 		}
 	}()
 
-	// TODO(hc) Phase 3: wire graceful drain to SIGTERM and the EC2 Spot interruption notice.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	// Spot interruption wires into the SAME drain path SIGTERM does: a notice closes the
+	// stop channel via this goroutine, no parallel shutdown code (ADR 0023). The watcher
+	// is a no-op off EC2, so this is safe to enable unconditionally in production AMIs.
+	if *spotWatch {
+		go spot.Watch(ctx, func() {
+			select {
+			case stop <- syscall.SIGTERM: // share the drain path
+			default: // already draining
+			}
+		})
+	}
+
 	<-stop
 	log.Println("shutting down")
+	// Deregister FIRST so clients stop routing here, THEN drain. (Sub-stage D extends this
+	// to wire the EC2 Spot interruption notice into the same path.)
+	if release != nil {
+		release()
+	}
 	gs.GracefulStop()
+}
+
+// splitCSV parses a comma-separated list, trimming blanks.
+func splitCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

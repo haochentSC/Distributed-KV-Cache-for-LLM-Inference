@@ -19,11 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KVCache_Lookup_FullMethodName = "/kvcache.v1.KVCache/Lookup"
-	KVCache_Fetch_FullMethodName  = "/kvcache.v1.KVCache/Fetch"
-	KVCache_Write_FullMethodName  = "/kvcache.v1.KVCache/Write"
-	KVCache_Evict_FullMethodName  = "/kvcache.v1.KVCache/Evict"
-	KVCache_Health_FullMethodName = "/kvcache.v1.KVCache/Health"
+	KVCache_Lookup_FullMethodName    = "/kvcache.v1.KVCache/Lookup"
+	KVCache_Fetch_FullMethodName     = "/kvcache.v1.KVCache/Fetch"
+	KVCache_Write_FullMethodName     = "/kvcache.v1.KVCache/Write"
+	KVCache_Replicate_FullMethodName = "/kvcache.v1.KVCache/Replicate"
+	KVCache_Evict_FullMethodName     = "/kvcache.v1.KVCache/Evict"
+	KVCache_Health_FullMethodName    = "/kvcache.v1.KVCache/Health"
 )
 
 // KVCacheClient is the client API for KVCache service.
@@ -42,8 +43,21 @@ type KVCacheClient interface {
 	// Fetch server-streams one block's KV tensor bytes in bounded chunks (ADR 0012).
 	Fetch(ctx context.Context, in *FetchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[KVChunk], error)
 	// Write client-streams one block. The FIRST message MUST be a WriteHeader; the
-	// rest are KVChunk data frames (ADR 0012).
+	// rest are KVChunk data frames (ADR 0012). The receiving shard is the PRIMARY for
+	// this block (the ring owner); it assigns the version and asynchronously forwards
+	// the block to its replica via Replicate (Phase 3 Sub-stage B, ADR 0021).
 	Write(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteChunk, WriteResponse], error)
+	// Replicate is the PRIMARY->REPLICA copy path (Sub-stage B). Same wire shape as
+	// Write (a WriteHeader then KVChunk frames), with two differences in meaning:
+	//   - The header's `version` field is AUTHORITATIVE: the replica stores the block
+	//     under the primary's assigned version, it does NOT mint its own (so primary
+	//     and replica versions never diverge).
+	//   - The replica stores locally and MUST NOT re-forward — this is what prevents a
+	//     replication loop (each node forwarding to its own replica forever).
+	//
+	// Cache data is eventually consistent (ADR 0013), so this is fire-and-forget from
+	// the primary's side: the client was already acked before this ran.
+	Replicate(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteChunk, WriteResponse], error)
 	// Evict removes a block from the cache.
 	Evict(ctx context.Context, in *EvictRequest, opts ...grpc.CallOption) (*EvictResponse, error)
 	// Health is a liveness/readiness probe.
@@ -100,6 +114,19 @@ func (c *kVCacheClient) Write(ctx context.Context, opts ...grpc.CallOption) (grp
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type KVCache_WriteClient = grpc.ClientStreamingClient[WriteChunk, WriteResponse]
 
+func (c *kVCacheClient) Replicate(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteChunk, WriteResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &KVCache_ServiceDesc.Streams[2], KVCache_Replicate_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[WriteChunk, WriteResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type KVCache_ReplicateClient = grpc.ClientStreamingClient[WriteChunk, WriteResponse]
+
 func (c *kVCacheClient) Evict(ctx context.Context, in *EvictRequest, opts ...grpc.CallOption) (*EvictResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(EvictResponse)
@@ -136,8 +163,21 @@ type KVCacheServer interface {
 	// Fetch server-streams one block's KV tensor bytes in bounded chunks (ADR 0012).
 	Fetch(*FetchRequest, grpc.ServerStreamingServer[KVChunk]) error
 	// Write client-streams one block. The FIRST message MUST be a WriteHeader; the
-	// rest are KVChunk data frames (ADR 0012).
+	// rest are KVChunk data frames (ADR 0012). The receiving shard is the PRIMARY for
+	// this block (the ring owner); it assigns the version and asynchronously forwards
+	// the block to its replica via Replicate (Phase 3 Sub-stage B, ADR 0021).
 	Write(grpc.ClientStreamingServer[WriteChunk, WriteResponse]) error
+	// Replicate is the PRIMARY->REPLICA copy path (Sub-stage B). Same wire shape as
+	// Write (a WriteHeader then KVChunk frames), with two differences in meaning:
+	//   - The header's `version` field is AUTHORITATIVE: the replica stores the block
+	//     under the primary's assigned version, it does NOT mint its own (so primary
+	//     and replica versions never diverge).
+	//   - The replica stores locally and MUST NOT re-forward — this is what prevents a
+	//     replication loop (each node forwarding to its own replica forever).
+	//
+	// Cache data is eventually consistent (ADR 0013), so this is fire-and-forget from
+	// the primary's side: the client was already acked before this ran.
+	Replicate(grpc.ClientStreamingServer[WriteChunk, WriteResponse]) error
 	// Evict removes a block from the cache.
 	Evict(context.Context, *EvictRequest) (*EvictResponse, error)
 	// Health is a liveness/readiness probe.
@@ -160,6 +200,9 @@ func (UnimplementedKVCacheServer) Fetch(*FetchRequest, grpc.ServerStreamingServe
 }
 func (UnimplementedKVCacheServer) Write(grpc.ClientStreamingServer[WriteChunk, WriteResponse]) error {
 	return status.Error(codes.Unimplemented, "method Write not implemented")
+}
+func (UnimplementedKVCacheServer) Replicate(grpc.ClientStreamingServer[WriteChunk, WriteResponse]) error {
+	return status.Error(codes.Unimplemented, "method Replicate not implemented")
 }
 func (UnimplementedKVCacheServer) Evict(context.Context, *EvictRequest) (*EvictResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Evict not implemented")
@@ -223,6 +266,13 @@ func _KVCache_Write_Handler(srv interface{}, stream grpc.ServerStream) error {
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type KVCache_WriteServer = grpc.ClientStreamingServer[WriteChunk, WriteResponse]
+
+func _KVCache_Replicate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(KVCacheServer).Replicate(&grpc.GenericServerStream[WriteChunk, WriteResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type KVCache_ReplicateServer = grpc.ClientStreamingServer[WriteChunk, WriteResponse]
 
 func _KVCache_Evict_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(EvictRequest)
@@ -289,6 +339,11 @@ var KVCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Write",
 			Handler:       _KVCache_Write_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "Replicate",
+			Handler:       _KVCache_Replicate_Handler,
 			ClientStreams: true,
 		},
 	},

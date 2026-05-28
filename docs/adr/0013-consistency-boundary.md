@@ -14,8 +14,9 @@ model") and `docs/01-architecture.md`.
 
 - **Cache data is eventually consistent.** A stale or missing entry just causes a recompute —
   exactly what a no-cache system does. So replication can be async and reads can be stale.
-- **Metadata is linearizable.** Shard-ownership and membership go through etcd (Phase 2+). Stale
-  metadata sends a write to the *wrong* shard, which silently corrupts the cache — not tolerable.
+- **Metadata is linearizable.** Shard-ownership and membership go through etcd (Phase 3+; deferred
+  from Phase 2 per ADR 0018 — Phase 2 uses static ring membership). Stale metadata sends a write to
+  the *wrong* shard, which silently corrupts the cache — not tolerable.
 
 ## Alternatives considered
 

@@ -17,7 +17,7 @@ flowchart TD
     lg["Synthetic load generator (Go)<br/>no GPU needed"] -- "gRPC" --> cache
     subgraph CPU["CPU nodes (the artifact)"]
         cache["Cache shard(s) (Go)<br/>striped map + eviction policy"]
-        cache -. "Phase 2: shard ownership" .-> etcd["etcd (Phase 2)"]
+        cache -. "Phase 3: shard ownership" .-> etcd["etcd (Phase 3)"]
     end
     cache -. "Phase 4 metrics" .-> obs["Prometheus/Grafana + CloudWatch"]
 ```
@@ -53,7 +53,7 @@ sequenceDiagram
 | Cache key & lookup | Block-wise chained hashing; **exact-key (1 block) first**, grows to longest-prefix. Server reports **per-block presence**; client assembles the longest run | [0011](./adr/0011-block-wise-key-and-per-block-presence.md) |
 | Tensor transport | **Chunked streaming** (`Fetch` server-streams, `Write` client-streams) — bounded memory, dodges gRPC's 4 MB message cap | [0012](./adr/0012-chunked-streaming-transport.md) |
 | Tensor payload | **Opaque framed bytes** (protobuf for metadata only); `lookup + fetch ≪ recompute` is a **Phase 1 exit gate** | [0015](./adr/0015-raw-bytes-kv-payload-and-serialization-gate.md) |
-| Consistency boundary | Cache data **eventually consistent**; metadata (Phase 2, etcd) **linearizable** | [0013](./adr/0013-consistency-boundary.md) |
+| Consistency boundary | Cache data **eventually consistent**; metadata (Phase 3, etcd) **linearizable** | [0013](./adr/0013-consistency-boundary.md) |
 | Key is opaque server-side | `prefix_hash`/`block_hash` are opaque bytes; tokenization stays client-side | [0010](./adr/0010-opaque-key-two-clients.md) |
 
 **Why per-block presence (not server-side longest-match):** blocks shard independently in Phase 2,
@@ -93,7 +93,8 @@ Defined in [`proto/kvcache/v1/kvcache.proto`](../proto/kvcache/v1/kvcache.proto)
 
 ## Deferred to later phases (seams placed, internals not designed yet)
 
-Consistent-hashing ring + shard routing (Phase 2), replication/failover + etcd leases (Phase 3),
+Consistent-hashing ring (Phase 2 — **built**, `internal/ring`) + shard routing (Phase 2, in
+progress), replication/failover + etcd leases (Phase 3 — etcd deferred from Phase 2 per ADR 0018),
 real eviction + observability + chaos (Phase 4), the multi-objective policy (Phase 5). The API,
 opaque key, per-block presence, and eviction interface are positioned so these slot in without
 rework.

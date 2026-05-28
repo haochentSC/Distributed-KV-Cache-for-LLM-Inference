@@ -9,10 +9,12 @@ failover, a cost-aware + fair eviction policy), integrated with **vLLM** via a c
 (no fork), and deployed on **AWS via Terraform**. The headline differentiator is a multi-objective
 eviction policy that trades cache *efficiency* against per-tenant *fairness* along a tunable curve.
 
-> **Status: Phase 1 (single-node cache).** A local gRPC cache server and synthetic load generator
-> are runnable without a GPU; cluster features (etcd, sharding, eviction policy) come in later
-> phases. This is an **educational project** — built deliberately, to learn distributed systems,
-> Go, LLM/vLLM internals, and cloud/IaC, not to ship fastest.
+> **Status: Phase 2 (two-node distributed cache — sharding + routing).** A local gRPC cache server
+> and synthetic load generator run without a GPU; the consistent-hash ring is built (`internal/ring`)
+> and client-side routing is in progress (local-first, then AWS). etcd, replication, and the eviction
+> policy come in later phases; Phase 1's vLLM connector tensor-copy + TTFT benchmark are deferred to
+> the Phase 4.5 GPU window. This is an **educational project** — built deliberately, to learn
+> distributed systems, Go, LLM/vLLM internals, and cloud/IaC, not to ship fastest.
 
 ## Navigate
 
@@ -92,7 +94,7 @@ Pre-commit (optional): `git config core.hooksPath .githooks` then commits run fm
 
 ## Roadmap (high level)
 
-Phase 0 Foundation → 1 Single-node external cache → 2 Two-node distributed cache on AWS →
+Phase 0 Foundation → 1 Single-node external cache → 2 Two-node distributed cache (local-first, then AWS) →
 3 Replication & failover → 4 Eviction, observability, chaos *(core ships gate)* → 4.5 GPU TTFT
 benchmark → 5 Cost-aware + fairness eviction policy *(the differentiator)* → 6 Polish & write-up.
 Full detail in [`docs/00-project-plan.md` §4](docs/00-project-plan.md).

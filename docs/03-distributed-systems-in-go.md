@@ -10,7 +10,7 @@
 | Concept | Phase | Project-specific decision | Deep dive |
 |---|---|---|---|
 | Sharding | 2 | shard = slice of prefix-hash space | skill: `sharding.md` |
-| Consistent hashing | 2 | hash on opaque `prefix_hash`; virtual nodes | skill: `consistent-hashing.md` |
+| Consistent hashing | 2 | **built** (`internal/ring`): prefix-affinity on `block_hash[0]` (ADR 0014); 128 virtual nodes; sha256 placement | skill: `consistent-hashing.md` |
 | Replication | 3 | RF=2, primary→replica async | skill: `replication.md` |
 | Leader election / coordination | 3 | etcd leases (don't hand-roll Raft — ADR 0002) | skill: `etcd-coordination.md` |
 | Failover & graceful drain | 3 | replica promotion; Spot-interrupt-triggered drain | skill: `failover.md` |
@@ -24,7 +24,13 @@
      sharded mutex maps vs sync.Map, errgroup, table-driven tests, the race detector. Keep
      examples short; the skill holds the long ones. -->
 
-_Filled as we build._
+- **Consistent-hash ring** (`internal/ring`, Phase 2): `sort.Slice` to keep the circle sorted,
+  `sort.Search` for the clockwise lookup + wrap, in-place slice filtering on `Remove`, and
+  deterministic vnode placement via `sha256` — **not** `maphash` (its seed is process-random, so
+  rings would disagree across clients). Lesson: `fnv-1a` clustered the vnodes badly (one node owned
+  ~41% over 4 nodes / 128 vnodes); the statistical distribution test caught it.
+- **Striped mutex map** (`internal/cache`): per-stripe `RWMutex` + atomic access counters under the
+  read lock; immutable published `Entry` so `Fetch` streams without holding a lock.
 
 ## Background reading
 

@@ -1,6 +1,7 @@
 # ADR 0009 — etcd runs on-demand (never Spot); 3-node recommended for v1
 
-- **Status:** accepted direction (final call at Phase 2 start) — Revision C, Session 1
+- **Status:** accepted direction — Revision C, Session 1. **Standup deferred to Phase 3 (ADR 0018):**
+  Phase 2 uses static ring membership; the 3-node on-demand topology below stands and is realized in Phase 3.
 - **Date:** 2026-05-24
 - **Deciders:** HC
 

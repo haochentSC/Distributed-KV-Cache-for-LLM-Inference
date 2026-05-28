@@ -16,15 +16,30 @@ import (
 // fetchChunkBytes bounds each Fetch frame well under gRPC's 4 MB message cap (ADR 0012).
 const fetchChunkBytes = 1 << 20 // 1 MiB
 
+// replicaEnqueuer schedules an async primary->replica copy of a freshly-written block
+// (ADR 0021). It is an interface so the Write hook can be tested with a fake and so a
+// single-node Server (repl == nil) skips replication entirely. The concrete impl is
+// *Replicator (replicator.go).
+type replicaEnqueuer interface {
+	Enqueue(job ReplicaJob)
+}
+
 // Server implements the generated kvcachev1.KVCacheServer. Embedding the
 // Unimplemented base makes future RPC additions non-breaking.
 type Server struct {
 	kvcachev1.UnimplementedKVCacheServer
 	store *cache.Store
+	repl  replicaEnqueuer // nil on a single node (no replication); set in Phase 3 Sub-stage B
 }
 
-// New wires a Server to a Store.
+// New wires a Server to a Store with NO replication (single-node / tests).
 func New(store *cache.Store) *Server { return &Server{store: store} }
+
+// NewWithReplicator wires a Server that, after each successful Write (it is the PRIMARY for
+// that block), hands the block to repl for async forwarding to the replica (ADR 0021).
+func NewWithReplicator(store *cache.Store, repl replicaEnqueuer) *Server {
+	return &Server{store: store, repl: repl}
+}
 
 // toBlockHash converts a wire []byte to a cache.BlockHash, rejecting wrong lengths.
 func toBlockHash(b []byte) (cache.BlockHash, bool) {
@@ -93,21 +108,25 @@ func (s *Server) Fetch(req *kvcachev1.FetchRequest, stream kvcachev1.KVCache_Fet
 	return nil
 }
 
-// Write client-streams one block: the FIRST message MUST be a WriteHeader, the rest
-// KVChunk data frames. It assembles the bytes, stores the entry, and returns the
-// assigned version (ADR 0012).
-func (s *Server) Write(stream kvcachev1.KVCache_WriteServer) error {
+// blockStream is the common shape of the Write and Replicate server streams (both are
+// gRPC client-streaming: a header then KVChunk frames). Declaring our own tiny interface
+// lets assembleBlock serve both without importing grpc here.
+type blockStream interface {
+	Recv() (*kvcachev1.WriteChunk, error)
+}
+
+// assembleBlock reads a Write/Replicate stream: the FIRST message must be a WriteHeader,
+// the rest KVChunk data frames, returning the header and the assembled tensor bytes.
+// Shared by Write and Replicate (identical wire shape, ADR 0021). [scaffold — extracted
+// verbatim from the original Write body.]
+func assembleBlock(stream blockStream) (*kvcachev1.WriteHeader, []byte, error) {
 	first, err := stream.Recv()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	hdr := first.GetHeader()
 	if hdr == nil {
-		return status.Error(codes.InvalidArgument, "first Write message must be a WriteHeader")
-	}
-	h, ok := toBlockHash(hdr.GetBlockHash())
-	if !ok {
-		return status.Error(codes.InvalidArgument, "block_hash must be 32 bytes")
+		return nil, nil, status.Error(codes.InvalidArgument, "first message must be a WriteHeader")
 	}
 
 	var buf []byte
@@ -120,14 +139,31 @@ func (s *Server) Write(stream kvcachev1.KVCache_WriteServer) error {
 			break
 		}
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		if msg.GetHeader() != nil {
-			return status.Error(codes.InvalidArgument, "unexpected second WriteHeader")
+			return nil, nil, status.Error(codes.InvalidArgument, "unexpected second WriteHeader")
 		}
 		if c := msg.GetChunk(); c != nil {
 			buf = append(buf, c.GetData()...)
 		}
+	}
+	return hdr, buf, nil
+}
+
+// Write client-streams one block to its PRIMARY (this shard, the ring owner). It assembles
+// the bytes, stores the entry (minting the version), returns the assigned version (ADR
+// 0012), and — if replication is configured — hands the block to the replicator for async
+// forwarding to the replica (ADR 0021). The client is acked as soon as the PRIMARY stored
+// it; replication is best-effort and off the ack path (ADR 0013).
+func (s *Server) Write(stream kvcachev1.KVCache_WriteServer) error {
+	hdr, buf, err := assembleBlock(stream)
+	if err != nil {
+		return err
+	}
+	h, ok := toBlockHash(hdr.GetBlockHash())
+	if !ok {
+		return status.Error(codes.InvalidArgument, "block_hash must be 32 bytes")
 	}
 
 	// buf is freshly built and not reused, so Put may take ownership (no copy).
@@ -138,7 +174,56 @@ func (s *Server) Write(stream kvcachev1.KVCache_WriteServer) error {
 		TenantID:      hdr.GetTenantId(),
 		RecomputeCost: hdr.GetRecomputeCost(),
 	})
+
+	if s.repl != nil {
+		// Buf is shared with the stored Entry. Safe: Put took ownership and publishes the
+		// entry as an immutable snapshot — neither side mutates it, so the replicator can
+		// stream the same bytes off-thread without copying.
+		s.repl.Enqueue(ReplicaJob{
+			Hash:          h,
+			ModelID:       hdr.GetModelId(),
+			KV:            buf,
+			TokenIDs:      hdr.GetTokenIds(),
+			TenantID:      hdr.GetTenantId(),
+			RecomputeCost: hdr.GetRecomputeCost(),
+			Version:       ver,
+			RoutingKey:    hdr.GetRoutingKey(),
+		})
+	}
+
 	return stream.SendAndClose(&kvcachev1.WriteResponse{Version: ver, Stored: true})
+}
+
+// Replicate is the PRIMARY->REPLICA copy path (ADR 0021): a peer primary forwards a block
+// it owns so this node holds the replica. Same wire shape as Write, but it stores at the
+// header's AUTHORITATIVE version (via Store.PutWithVersion) and MUST NOT re-forward — that
+// is what stops a replication loop. Fire-and-forget from the primary's side.
+func (s *Server) Replicate(stream kvcachev1.KVCache_ReplicateServer) error {
+	hdr, buf, err := assembleBlock(stream)
+	if err != nil {
+		return err
+	}
+	h, ok := toBlockHash(hdr.GetBlockHash())
+	if !ok {
+		return status.Error(codes.InvalidArgument, "block_hash must be 32 bytes")
+	}
+	ver := hdr.GetVersion()
+	if ver == 0 {
+		// Sentinel guard: an unset version on the Replicate path is a primary-side bug, not
+		// silently storable. Surfacing it here keeps the divergence-prevention invariant
+		// (primary and replica share a version) executable.
+		return status.Error(codes.InvalidArgument, "Replicate requires header.version > 0")
+	}
+	stored := s.store.PutWithVersion(h, &cache.Entry{
+		ModelID:       hdr.GetModelId(),
+		KV:            buf,
+		TokenIDs:      hdr.GetTokenIds(),
+		TenantID:      hdr.GetTenantId(),
+		RecomputeCost: hdr.GetRecomputeCost(),
+	}, ver)
+	// Loop prevention: deliberately do NOT touch s.repl here. A replica receiving Replicate
+	// stores locally and stops — re-forwarding would loop forever across N nodes.
+	return stream.SendAndClose(&kvcachev1.WriteResponse{Version: stored, Stored: stored == ver})
 }
 
 // Evict removes a block and reports whether it was present.

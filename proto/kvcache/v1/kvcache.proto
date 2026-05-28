@@ -18,8 +18,21 @@ service KVCache {
   rpc Fetch(FetchRequest) returns (stream KVChunk);
 
   // Write client-streams one block. The FIRST message MUST be a WriteHeader; the
-  // rest are KVChunk data frames (ADR 0012).
+  // rest are KVChunk data frames (ADR 0012). The receiving shard is the PRIMARY for
+  // this block (the ring owner); it assigns the version and asynchronously forwards
+  // the block to its replica via Replicate (Phase 3 Sub-stage B, ADR 0021).
   rpc Write(stream WriteChunk) returns (WriteResponse);
+
+  // Replicate is the PRIMARY->REPLICA copy path (Sub-stage B). Same wire shape as
+  // Write (a WriteHeader then KVChunk frames), with two differences in meaning:
+  //   - The header's `version` field is AUTHORITATIVE: the replica stores the block
+  //     under the primary's assigned version, it does NOT mint its own (so primary
+  //     and replica versions never diverge).
+  //   - The replica stores locally and MUST NOT re-forward — this is what prevents a
+  //     replication loop (each node forwarding to its own replica forever).
+  // Cache data is eventually consistent (ADR 0013), so this is fire-and-forget from
+  // the primary's side: the client was already acked before this ran.
+  rpc Replicate(stream WriteChunk) returns (WriteResponse);
 
   // Evict removes a block from the cache.
   rpc Evict(EvictRequest) returns (EvictResponse);
@@ -69,6 +82,14 @@ message WriteHeader {
   string tenant_id = 4;         // Phase 5 fairness
   double recompute_cost = 5;    // Phase 5 cost-aware eviction
   uint64 total_size = 6;        // total tensor bytes that will follow
+  uint64 version = 7;           // Replicate path ONLY: the primary's assigned version
+                                // the replica must store under. Ignored by Write (the
+                                // primary mints the version there). 0 on the Write path.
+  bytes routing_key = 8;        // the PROMPT ROOT (blocks[0].Hash) the client routed this
+                                // prompt by (prefix-affinity, ADR 0014). The primary needs
+                                // it to pick the SAME replica the client's read-failover
+                                // will try — placement is by root, storage is by block_hash
+                                // (ADR 0021). Empty => fall back to block_hash (single block).
 }
 
 message WriteResponse {

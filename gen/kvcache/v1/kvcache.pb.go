@@ -387,6 +387,10 @@ type WriteHeader struct {
 	TenantId      string                 `protobuf:"bytes,4,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`                  // Phase 5 fairness
 	RecomputeCost float64                `protobuf:"fixed64,5,opt,name=recompute_cost,json=recomputeCost,proto3" json:"recompute_cost,omitempty"` // Phase 5 cost-aware eviction
 	TotalSize     uint64                 `protobuf:"varint,6,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`              // total tensor bytes that will follow
+	Version       uint64                 `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`                                   // Replicate path ONLY: the primary's assigned version
+	// the replica must store under. Ignored by Write (the
+	// primary mints the version there). 0 on the Write path.
+	RoutingKey    []byte `protobuf:"bytes,8,opt,name=routing_key,json=routingKey,proto3" json:"routing_key,omitempty"` // the PROMPT ROOT (blocks[0].Hash) the client routed this
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -461,6 +465,20 @@ func (x *WriteHeader) GetTotalSize() uint64 {
 		return x.TotalSize
 	}
 	return 0
+}
+
+func (x *WriteHeader) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *WriteHeader) GetRoutingKey() []byte {
+	if x != nil {
+		return x.RoutingKey
+	}
+	return nil
 }
 
 type WriteResponse struct {
@@ -720,7 +738,7 @@ const file_proto_kvcache_v1_kvcache_proto_rawDesc = "" +
 	"WriteChunk\x121\n" +
 	"\x06header\x18\x01 \x01(\v2\x17.kvcache.v1.WriteHeaderH\x00R\x06header\x12+\n" +
 	"\x05chunk\x18\x02 \x01(\v2\x13.kvcache.v1.KVChunkH\x00R\x05chunkB\x05\n" +
-	"\x03msg\"\xc7\x01\n" +
+	"\x03msg\"\x82\x02\n" +
 	"\vWriteHeader\x12\x19\n" +
 	"\bmodel_id\x18\x01 \x01(\tR\amodelId\x12\x1d\n" +
 	"\n" +
@@ -729,7 +747,10 @@ const file_proto_kvcache_v1_kvcache_proto_rawDesc = "" +
 	"\ttenant_id\x18\x04 \x01(\tR\btenantId\x12%\n" +
 	"\x0erecompute_cost\x18\x05 \x01(\x01R\rrecomputeCost\x12\x1d\n" +
 	"\n" +
-	"total_size\x18\x06 \x01(\x04R\ttotalSize\"A\n" +
+	"total_size\x18\x06 \x01(\x04R\ttotalSize\x12\x18\n" +
+	"\aversion\x18\a \x01(\x04R\aversion\x12\x1f\n" +
+	"\vrouting_key\x18\b \x01(\fR\n" +
+	"routingKey\"A\n" +
 	"\rWriteResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x04R\aversion\x12\x16\n" +
 	"\x06stored\x18\x02 \x01(\bR\x06stored\"H\n" +
@@ -741,11 +762,12 @@ const file_proto_kvcache_v1_kvcache_proto_rawDesc = "" +
 	"\aevicted\x18\x01 \x01(\bR\aevicted\"\x0f\n" +
 	"\rHealthRequest\" \n" +
 	"\x0eHealthResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok2\xc1\x02\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok2\x83\x03\n" +
 	"\aKVCache\x12?\n" +
 	"\x06Lookup\x12\x19.kvcache.v1.LookupRequest\x1a\x1a.kvcache.v1.LookupResponse\x128\n" +
 	"\x05Fetch\x12\x18.kvcache.v1.FetchRequest\x1a\x13.kvcache.v1.KVChunk0\x01\x12<\n" +
-	"\x05Write\x12\x16.kvcache.v1.WriteChunk\x1a\x19.kvcache.v1.WriteResponse(\x01\x12<\n" +
+	"\x05Write\x12\x16.kvcache.v1.WriteChunk\x1a\x19.kvcache.v1.WriteResponse(\x01\x12@\n" +
+	"\tReplicate\x12\x16.kvcache.v1.WriteChunk\x1a\x19.kvcache.v1.WriteResponse(\x01\x12<\n" +
 	"\x05Evict\x12\x18.kvcache.v1.EvictRequest\x1a\x19.kvcache.v1.EvictResponse\x12?\n" +
 	"\x06Health\x12\x19.kvcache.v1.HealthRequest\x1a\x1a.kvcache.v1.HealthResponseBEZCgithub.com/haochentSC/distributed-kv-cache/gen/kvcache/v1;kvcachev1b\x06proto3"
 
@@ -783,15 +805,17 @@ var file_proto_kvcache_v1_kvcache_proto_depIdxs = []int32{
 	0,  // 3: kvcache.v1.KVCache.Lookup:input_type -> kvcache.v1.LookupRequest
 	3,  // 4: kvcache.v1.KVCache.Fetch:input_type -> kvcache.v1.FetchRequest
 	5,  // 5: kvcache.v1.KVCache.Write:input_type -> kvcache.v1.WriteChunk
-	8,  // 6: kvcache.v1.KVCache.Evict:input_type -> kvcache.v1.EvictRequest
-	10, // 7: kvcache.v1.KVCache.Health:input_type -> kvcache.v1.HealthRequest
-	1,  // 8: kvcache.v1.KVCache.Lookup:output_type -> kvcache.v1.LookupResponse
-	4,  // 9: kvcache.v1.KVCache.Fetch:output_type -> kvcache.v1.KVChunk
-	7,  // 10: kvcache.v1.KVCache.Write:output_type -> kvcache.v1.WriteResponse
-	9,  // 11: kvcache.v1.KVCache.Evict:output_type -> kvcache.v1.EvictResponse
-	11, // 12: kvcache.v1.KVCache.Health:output_type -> kvcache.v1.HealthResponse
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
+	5,  // 6: kvcache.v1.KVCache.Replicate:input_type -> kvcache.v1.WriteChunk
+	8,  // 7: kvcache.v1.KVCache.Evict:input_type -> kvcache.v1.EvictRequest
+	10, // 8: kvcache.v1.KVCache.Health:input_type -> kvcache.v1.HealthRequest
+	1,  // 9: kvcache.v1.KVCache.Lookup:output_type -> kvcache.v1.LookupResponse
+	4,  // 10: kvcache.v1.KVCache.Fetch:output_type -> kvcache.v1.KVChunk
+	7,  // 11: kvcache.v1.KVCache.Write:output_type -> kvcache.v1.WriteResponse
+	7,  // 12: kvcache.v1.KVCache.Replicate:output_type -> kvcache.v1.WriteResponse
+	9,  // 13: kvcache.v1.KVCache.Evict:output_type -> kvcache.v1.EvictResponse
+	11, // 14: kvcache.v1.KVCache.Health:output_type -> kvcache.v1.HealthResponse
+	9,  // [9:15] is the sub-list for method output_type
+	3,  // [3:9] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name

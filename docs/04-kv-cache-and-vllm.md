@@ -49,7 +49,9 @@ and external-cache warm one-token generation latency. Treat it as a TTFT proxy u
 vLLM exposes first-token timestamps directly.
 
 Phase 1 is not complete until the benchmark shows warm repeated-prefix improvement and the
-serialization gate from ADR 0015 is recorded.
+serialization gate from ADR 0015 is recorded. **(Session 3, 2026-05-25: this finalization + the TTFT
+run are deferred to the Phase 4.5 GPU window — they need WSL2 + a local GPU. Phase 2 proceeds on the
+synthetic load generator without them, per the GPU-decoupling design.)**
 
 ## Reading
 

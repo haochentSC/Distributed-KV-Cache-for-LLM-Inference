@@ -104,16 +104,9 @@ func (r *Ring) Lookup(key []byte) string {
 	if len(r.points) == 0 {
 		return ""
 	}
-	// Real keys are 32-byte SHA-256 roots, so key[:8] is uniform. The short-key branch
-	// is just a guard so a malformed key can't panic the read path.
-	var h uint64
-	if len(key) >= 8 {
-		h = binary.BigEndian.Uint64(key[:8])
-	} else {
-		var b [8]byte
-		copy(b[:], key)
-		h = binary.BigEndian.Uint64(b[:])
-	}
+	// Real keys are 32-byte SHA-256 roots, so key[:8] is uniform. keyHash is shared with
+	// LookupN so the two can't drift on a malformed-key edge case.
+	h := keyHash(key)
 	// sort.Search returns the smallest index i where points[i].hash >= h. If none
 	// qualifies (h is past the largest point), it returns len(points) and we wrap to 0 —
 	// that's the "clockwise past the top of the circle" step.
@@ -122,6 +115,52 @@ func (r *Ring) Lookup(key []byte) string {
 		idx = 0
 	}
 	return r.points[idx].node
+}
+
+// LookupN returns up to n DISTINCT physical nodes that own key, in clockwise order from
+// the owner: index 0 is the primary (== Lookup(key)), index 1 the first replica, and so
+// on. It returns fewer than n only when the ring has fewer than n physical nodes. This is
+// the placement primitive for RF=2 replication (ADR 0021): primary = result[0], replica =
+// result[1]. Every process computes the same result from the same member set, so primary
+// and replica agree on placement with no extra coordination.
+func (r *Ring) LookupN(key []byte, n int) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(r.points) == 0 || n <= 0 {
+		return nil
+	}
+	h := keyHash(key)
+	idx := sort.Search(len(r.points), func(i int) bool { return r.points[i].hash >= h })
+	if idx == len(r.points) {
+		idx = 0
+	}
+	// Cap n at the physical node count so n > N callers don't trigger a wasted full lap.
+	if n > len(r.members) {
+		n = len(r.members)
+	}
+	out := make([]string, 0, n)
+	seen := make(map[string]struct{}, n)
+	for step := 0; step < len(r.points) && len(out) < n; step++ {
+		node := r.points[(idx+step)%len(r.points)].node
+		if _, dup := seen[node]; dup {
+			continue // skip the other vnodes of an already-collected physical node
+		}
+		seen[node] = struct{}{}
+		out = append(out, node)
+	}
+	return out
+}
+
+// keyHash maps a routing key to a ring position. Extracted so Lookup and LookupN can't drift
+// (a single keying bug would break both placement and read-failover the same way, which is
+// at least debuggable; two independent bugs would not be).
+func keyHash(key []byte) uint64 {
+	if len(key) >= 8 {
+		return binary.BigEndian.Uint64(key[:8])
+	}
+	var b [8]byte
+	copy(b[:], key)
+	return binary.BigEndian.Uint64(b[:])
 }
 
 // Nodes returns the current physical node IDs in no particular order.

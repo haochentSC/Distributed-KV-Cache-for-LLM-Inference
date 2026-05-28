@@ -120,6 +120,53 @@ func (s *Store) Put(h BlockHash, e *Entry) uint64 {
 	return version
 }
 
+// PutWithVersion stores e under h at an EXPLICIT version — the replica side of replication
+// (the Replicate RPC, ADR 0021). The replica must keep the version the PRIMARY assigned,
+// not mint its own: a version-pinned Fetch (server.Fetch) compares versions, so if the two
+// copies disagreed, a failover read could spuriously miss.
+//
+// How it differs from Put:
+//   - Put MINTS version = prev+1; PutWithVersion is TOLD the version.
+//   - Replication can arrive out of order or late. Last-writer-wins is fine for
+//     eventually-consistent cache data (ADR 0013), but a STALE delivery must not clobber a
+//     newer copy. So if a local entry already exists with Version >= version, KEEP it and
+//     drop this delivery.
+func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
+	if e == nil || version == 0 {
+		// version == 0 is reserved for "unset" on the wire (Write path); refuse it here so a
+		// missing field doesn't quietly install an entry under a sentinel version.
+		return 0
+	}
+	st := s.stripeFor(h)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	created := time.Now()
+	if prev, ok := st.m[h]; ok {
+		if prev.Version >= version {
+			// Stale or duplicate delivery — keep the newer (or equal) local copy. Last-writer-
+			// wins is fine for eventually-consistent cache data (ADR 0013), but only when
+			// "later" means strictly greater version; an out-of-order replay must not clobber.
+			return prev.Version
+		}
+		created = prev.CreatedAt
+	}
+
+	stored := &Entry{
+		TokenIDs:      e.TokenIDs,
+		KV:            e.KV,
+		ModelID:       e.ModelID,
+		Version:       version, // authoritative — assigned by the primary, NOT minted here
+		SizeBytes:     int64(len(e.KV)),
+		TenantID:      e.TenantID,
+		RecomputeCost: e.RecomputeCost,
+		CreatedAt:     created,
+	}
+	st.m[h] = stored
+	s.policy.RecordWrite(h, stored.SizeBytes)
+	return version
+}
+
 // Delete removes (model, h) and reports whether it was present, recording an eviction
 // on a hit. A model mismatch is a no-op miss.
 func (s *Store) Delete(model string, h BlockHash) bool {

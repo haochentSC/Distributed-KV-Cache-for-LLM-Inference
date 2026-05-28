@@ -45,8 +45,14 @@ If HC is stuck, Claude gives a hint or leading question before the answer.
       (prefix-affinity, ADR 0014), client-side routing with degrade-to-miss, multi-process local
       harness, then Terraform cluster on AWS. **etcd deferred to Phase 3 (ADR 0018):** static ring
       membership for now. **Started 2026-05-25.**
-- [ ] **Phase 3 - Replication & failover:** RF=2, async replication, replica promotion, etcd lease
-      leader election, graceful drain wired to Spot interruption, IAM + S3 cold tier.
+- [~] **Phase 3 - Replication & failover:** RF=2, async replication, replica promotion, etcd lease
+      membership, graceful drain wired to Spot interruption. **Status 2026-05-28:** Sub-stages
+      A (etcd membership, ADR 0020), B (RF=2 async replication, ADR 0021), C (implicit promotion
+      via ring rotation, ADR 0022), and D (graceful drain + Spot, ADR 0023) all landed locally.
+      Per-shard leader-election leases were *not* needed — the deterministic ring + replica-at-
+      LookupN[1] makes promotion implicit (see ADR 0022). **Remaining for the Phase 3 box-check:**
+      WSL2 `-race` pass on cluster/coord/server/spot; multi-node chaos test (kill + verify served
+      from replica); IAM + S3 cold tier (deferred — slot belongs with Phase 4 AWS work).
 - [ ] **Phase 4 - Eviction, observability, chaos:** LRU+TTL eviction, memory-pressure eviction,
       Prometheus/Grafana + CloudWatch, chaos harness, benchmark report.
 - [ ] **Phase 4.5 - GPU benchmark:** real vLLM + GPU TTFT number, then destroy GPU resources.

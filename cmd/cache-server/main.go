@@ -36,7 +36,18 @@ func main() {
 	leaseTTL := flag.Int64("lease-ttl", 10, "etcd membership lease TTL in seconds (also the failure-detection window)")
 	rf := flag.Int("rf", 2, "replication factor: primary + (rf-1) replicas (ADR 0021); 1 disables replication")
 	spotWatch := flag.Bool("spot", false, "watch EC2 IMDS for Spot interruption and drain on notice (ADR 0023); no-op off EC2")
+	maxBytes := flag.Int64("max-bytes", 0, "soft+hard memory bound for this shard in bytes; 0 = unbounded (Phase 4 eviction)")
+	hiWater := flag.Float64("hi-water", 0.90, "high-water fraction of -max-bytes that wakes the evictor")
+	loWater := flag.Float64("lo-water", 0.75, "low-water fraction of -max-bytes the evictor frees down to")
+	ttl := flag.Duration("ttl", 0, "idle TTL: evict blocks not read within this window; 0 disables the TTL sweep")
+	evictSweep := flag.Duration("evict-sweep", 30*time.Second, "how often the TTL sweep runs")
 	flag.Parse()
+
+	// Surface watermark misconfiguration loudly: the Store would otherwise silently clamp a bad
+	// pair back to its defaults, which hides an operator typo. Only meaningful when a bound is set.
+	if *maxBytes > 0 && !(*hiWater > 0 && *hiWater <= 1 && *loWater > 0 && *loWater < *hiWater) {
+		log.Fatalf("invalid watermarks: need 0 < -lo-water (%.2f) < -hi-water (%.2f) <= 1", *loWater, *hiWater)
+	}
 
 	// The advertise address is what gets published to etcd; ":50051" is not dialable by a
 	// remote client, so it must carry a reachable host in a real cluster.
@@ -49,11 +60,21 @@ func main() {
 		id = adv // the address doubles as the ring label, matching the static driver's convention
 	}
 
-	store := cache.NewStore(cache.NoopPolicy{})
+	// Phase 4: an LRU-backed, optionally bounded Store. With -max-bytes unset it stays
+	// unbounded (NoopPolicy-equivalent behaviour). The LRU is the baseline policy Phase 5's
+	// cost-aware/fairness engine will be measured against — swapped here, nowhere else.
+	store := cache.NewStore(cache.NewLRU(),
+		cache.WithMaxBytes(*maxBytes),
+		cache.WithWatermarks(*hiWater, *loWater),
+	)
 
-	// ctx bounds the membership watch + replicator goroutines; cancelled on shutdown.
+	// ctx bounds the membership watch + replicator + evictor goroutines; cancelled on shutdown.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// The background evictor handles memory pressure (watermark drain) and TTL expiry. It is a
+	// no-op until -max-bytes/-ttl are set, so it's always safe to start.
+	go cache.NewEvictor(store, *ttl, *evictSweep).Run(ctx)
 
 	// Register into etcd membership (optional). release() deregisters by revoking the lease.
 	// With etcd configured we ALSO watch membership ourselves and run a Replicator: as the

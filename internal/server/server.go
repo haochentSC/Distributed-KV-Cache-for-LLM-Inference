@@ -166,6 +166,13 @@ func (s *Server) Write(stream kvcachev1.KVCache_WriteServer) error {
 		return status.Error(codes.InvalidArgument, "block_hash must be 32 bytes")
 	}
 
+	// TODO(hc): write-admission guard (ADR 0017). Before storing, reject-fast if this block
+	// would breach the hard byte ceiling and the evictor can't be relied on to catch up:
+	//   if s.store.OverHardLimit(int64(len(buf))) {
+	//       return status.Error(codes.ResourceExhausted, "cache full")
+	//   }
+	// A rejected write is just a future recompute (ADR 0013) — never a correctness violation.
+
 	// buf is freshly built and not reused, so Put may take ownership (no copy).
 	ver := s.store.Put(h, &cache.Entry{
 		ModelID:       hdr.GetModelId(),

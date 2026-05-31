@@ -6,10 +6,11 @@ cost-aware + fair eviction), integrated with vLLM and deployed on AWS via Terraf
 
 **Source of truth:** [`docs/00-project-plan.md`](docs/00-project-plan.md) — strategy, phases,
 decisions log. Don't duplicate it here. Decisions are recorded as ADRs in `docs/adr/`.
-**Current phase: Phase 2 (two-node distributed cache — sharding + routing; local-first, then AWS).**
-Phase 1's CPU-only core (server, store, block-hash, load generator, Python connector libs) is done;
-its vLLM tensor-copy hooks + TTFT exit gate are deferred to Phase 4.5 (GPU path). etcd is deferred to
-Phase 3 (ADR 0018) — Phase 2 uses static ring membership.
+**Current phase: Phase 4 (eviction, observability, chaos — local-first, then AWS).**
+Phases 1–3 are done: the CPU-only core (server, store, block-hash, load generator, Python connector
+libs), the consistent-hash ring + client routing, and etcd-coordinated RF=2 async replication with
+implicit promotion and graceful/Spot drain (ADRs 0021–0023). vLLM tensor-copy hooks + the TTFT exit
+gate remain deferred to Phase 4.5 (GPU path).
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->

@@ -3,6 +3,7 @@ package cache
 import (
 	"encoding/binary"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -17,6 +18,19 @@ import (
 type Store struct {
 	stripes []*stripe
 	policy  EvictionPolicy
+
+	// Memory accounting (Phase 4). totalBytes is the sum of every stored Entry.SizeBytes
+	// across ALL stripes; it is read by the Evictor without holding any stripe lock, so it
+	// MUST be atomic (never a plain int64 guarded by per-stripe mutexes — no single mutex
+	// covers the sum). maxBytes == 0 means UNBOUNDED — the pre-Phase-4 behaviour that
+	// NoopPolicy and most unit tests rely on, so old callers keep working untouched.
+	totalBytes atomic.Int64
+	maxBytes   int64 // hard ceiling; 0 = unbounded
+	hiWater    int64 // absolute byte level that wakes the Evictor (hiFrac * maxBytes)
+	loWater    int64 // the Evictor frees down to this; hiWater-loWater is the hysteresis gap
+	hiFrac     float64
+	loFrac     float64
+	evictSig   chan struct{} // buffered(1): a coalesced "you have work" nudge to the Evictor
 }
 
 type stripe struct {
@@ -26,8 +40,35 @@ type stripe struct {
 
 const numStripes = 16 // power of two so stripeFor can mask instead of modulo
 
-// NewStore builds a Store, defaulting to NoopPolicy when policy is nil.
-func NewStore(policy EvictionPolicy) *Store {
+// Default watermark fractions of maxBytes. hi wakes the Evictor; lo is what it frees down to.
+// They live as consts so NewStore's struct literal and the misconfiguration fallback agree.
+const (
+	defaultHiFrac = 0.90
+	defaultLoFrac = 0.75
+)
+
+// StoreOption configures a Store at construction (functional-options pattern). Phase 4 adds
+// memory bounds; callers that pass no options get the original unbounded Store, so existing
+// call sites — NewStore(NoopPolicy{}) — compile and behave exactly as before.
+type StoreOption func(*Store)
+
+// WithMaxBytes bounds the shard's resident size. When usage crosses the high-water mark the
+// background Evictor frees entries down to the low-water mark; a write that would breach the
+// ceiling outright is rejected by the admission guard (OverHardLimit). n <= 0 = unbounded.
+func WithMaxBytes(n int64) StoreOption {
+	return func(s *Store) { s.maxBytes = n }
+}
+
+// WithWatermarks overrides the high/low-water fractions of maxBytes (defaults 0.90 / 0.75).
+// hi is the level that wakes the Evictor; lo is the level it frees down to. Caller must keep
+// 0 < lo < hi <= 1. The absolute thresholds are computed in NewStore once maxBytes is known.
+func WithWatermarks(hi, lo float64) StoreOption {
+	return func(s *Store) { s.hiFrac, s.loFrac = hi, lo }
+}
+
+// NewStore builds a Store, defaulting to NoopPolicy when policy is nil. Options are applied
+// after the defaults, then the absolute watermarks are derived from the final maxBytes.
+func NewStore(policy EvictionPolicy, opts ...StoreOption) *Store {
 	if policy == nil {
 		policy = NoopPolicy{}
 	}
@@ -35,7 +76,74 @@ func NewStore(policy EvictionPolicy) *Store {
 	for i := range stripes {
 		stripes[i] = &stripe{m: make(map[BlockHash]*Entry)}
 	}
-	return &Store{stripes: stripes, policy: policy}
+	s := &Store{
+		stripes:  stripes,
+		policy:   policy,
+		hiFrac:   defaultHiFrac,
+		loFrac:   defaultLoFrac,
+		evictSig: make(chan struct{}, 1),
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	// Guard against operator misconfiguration — the watermark fractions come straight from CLI
+	// flags and only make sense as 0 < lo < hi <= 1. A bad pair would either drain the WHOLE shard
+	// (lo <= 0) or collapse the hysteresis gap (lo >= hi → evict-one/write-one thrash), so fall
+	// back to the defaults rather than honor it. (Silent on purpose: NewStore has no logger and is
+	// called from tests; main.go validates the same flags up front for an operator-facing warning.)
+	if !(s.hiFrac > 0 && s.hiFrac <= 1 && s.loFrac > 0 && s.loFrac < s.hiFrac) {
+		s.hiFrac, s.loFrac = defaultHiFrac, defaultLoFrac
+	}
+	if s.maxBytes > 0 {
+		s.hiWater = int64(float64(s.maxBytes) * s.hiFrac)
+		s.loWater = int64(float64(s.maxBytes) * s.loFrac)
+	}
+	return s
+}
+
+// Bytes reports the current resident size (sum of all stored Entry.SizeBytes). Lock-free.
+func (s *Store) Bytes() int64 { return s.totalBytes.Load() }
+
+// Len reports the number of stored entries across all stripes. It briefly RLocks each stripe,
+// so treat it as a metrics/diagnostic call, not a hot-path one.
+func (s *Store) Len() int {
+	n := 0
+	for _, st := range s.stripes {
+		st.mu.RLock()
+		n += len(st.m)
+		st.mu.RUnlock()
+	}
+	return n
+}
+
+// LowWater returns the byte level the Evictor frees down to (0 when unbounded). The Evictor's
+// drain loop reads this; exported so it lives in one place.
+func (s *Store) LowWater() int64 { return s.loWater }
+
+// EvictSignal is the channel the Evictor selects on to learn it has pressure work. Receive-only
+// to callers; only signalEvict sends.
+func (s *Store) EvictSignal() <-chan struct{} { return s.evictSig }
+
+// signalEvict nudges the Evictor when usage is at/over the high-water mark. NON-BLOCKING: the
+// channel is buffered(1), so if a nudge is already pending we drop this one (coalescing — the
+// Evictor will drain to low-water regardless of how many writes piled up). Cheap enough to call
+// while holding the stripe lock because the send never blocks.
+func (s *Store) signalEvict() {
+	if s.maxBytes <= 0 || s.totalBytes.Load() < s.hiWater {
+		return
+	}
+	select {
+	case s.evictSig <- struct{}{}:
+	default:
+	}
+}
+
+// OverHardLimit reports whether accepting addBytes more would push past the hard ceiling
+// (maxBytes). Server.Write uses it to reject-fast (ADR 0017) rather than risk OOM when the
+// Evictor can't keep up — a rejected write is just a future recompute (ADR 0013). Unbounded
+// stores (maxBytes == 0) never reject.
+func (s *Store) OverHardLimit(addBytes int64) bool {
+	return s.maxBytes > 0 && s.totalBytes.Load()+addBytes > s.maxBytes
 }
 
 // stripeFor selects the stripe for a key. Block hashes are uniform (SHA-256), so the
@@ -100,9 +208,11 @@ func (s *Store) Put(h BlockHash, e *Entry) uint64 {
 
 	version := uint64(1)
 	created := time.Now()
+	var prevSize int64 // bytes the overwritten entry occupied (0 on first write)
 	if prev, ok := st.m[h]; ok {
 		version = prev.Version + 1
 		created = prev.CreatedAt // preserve original creation time across overwrites
+		prevSize = prev.SizeBytes
 	}
 
 	stored := &Entry{
@@ -117,6 +227,14 @@ func (s *Store) Put(h BlockHash, e *Entry) uint64 {
 	}
 	st.m[h] = stored
 	s.policy.RecordWrite(h, stored.SizeBytes)
+
+	// TODO(hc): account for the bytes this write added or replaced, then nudge the Evictor.
+	//   - The DELTA is (new size - prev size): on a first write prevSize is 0 so we add the
+	//     whole thing; on an overwrite we add only the difference (which may be negative).
+	//   - Update the counter atomically: s.totalBytes.Add(stored.SizeBytes - prevSize)
+	//   - Then call s.signalEvict() so a write that crossed the high-water mark wakes the
+	//     drain loop. (signalEvict is a no-op when unbounded or below hiWater.)
+	_ = prevSize // delete this line once the TODO above is implemented
 	return version
 }
 
@@ -142,6 +260,7 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 	defer st.mu.Unlock()
 
 	created := time.Now()
+	var prevSize int64 // bytes the superseded entry occupied (0 if none)
 	if prev, ok := st.m[h]; ok {
 		if prev.Version >= version {
 			// Stale or duplicate delivery — keep the newer (or equal) local copy. Last-writer-
@@ -150,6 +269,7 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 			return prev.Version
 		}
 		created = prev.CreatedAt
+		prevSize = prev.SizeBytes
 	}
 
 	stored := &Entry{
@@ -164,6 +284,11 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 	}
 	st.m[h] = stored
 	s.policy.RecordWrite(h, stored.SizeBytes)
+
+	// TODO(hc): same accounting as Put — replication writes count toward the byte budget too.
+	//   s.totalBytes.Add(stored.SizeBytes - prevSize)
+	//   s.signalEvict()
+	_ = prevSize // delete this line once the TODO above is implemented
 	return version
 }
 
@@ -180,5 +305,71 @@ func (s *Store) Delete(model string, h BlockHash) bool {
 	}
 	delete(st.m, h)
 	s.policy.RecordEvict(h)
+	// TODO(hc): a deleted entry frees its bytes — s.totalBytes.Add(-e.SizeBytes)
 	return true
+}
+
+// evict removes a block by hash REGARDLESS of model and returns the bytes it freed (0 if it
+// was already gone). This is the INTERNAL memory-pressure path used only by the Evictor —
+// unlike Delete (the RPC path) there is no model check, because the policy named a raw hash
+// and within a shard a hash maps to exactly one entry.
+//
+// Lock order (read this before implementing): stripe lock FIRST, and RecordEvict (called here)
+// re-enters the LRU's own lock — so the order is stripe -> lru, matching Get and Put. The
+// Evictor MUST have already returned from Victim() (releasing the LRU lock) before calling
+// evict; never hold the LRU lock across this call, or two goroutines take {stripe, lru} in
+// opposite orders and deadlock. (See lru.go's header.)
+func (s *Store) evict(h BlockHash) int64 {
+	st := s.stripeFor(h)
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	// TODO(hc):
+	//   1. look up st.m[h]; if absent, return 0 (a concurrent Delete already removed it)
+	//   2. delete(st.m, h)
+	//   3. s.totalBytes.Add(-e.SizeBytes)
+	//   4. s.policy.RecordEvict(h)
+	//   5. return the freed byte count (e.SizeBytes)
+	return 0
+}
+
+// evictOne asks the policy for its next victim and evicts it, returning the bytes freed and
+// whether the policy HAD a victim to offer. This is the ONE place the "ask policy, then delete
+// from store" sequence lives, so the stripe->lru lock order is enforced in a single spot. The
+// Evictor's drain loop just calls this until it's freed enough.
+//
+// Contract precision (the drain loop depends on it): ok==true means the POLICY named a victim, NOT
+// that bytes were necessarily freed. freed can be 0 with ok==true when the victim raced away
+// between Victim() and evict() — a concurrent Delete/overwrite. That is harmless: Delete calls
+// RecordEvict, so the LRU won't re-offer the same hash, and the Evictor breaks only on ok==false
+// (policy empty / all pinned) while otherwise re-checking Bytes(). So a 0-freed pass never spins.
+func (s *Store) evictOne() (freed int64, ok bool) {
+	// TODO(hc):
+	//   h, ok := s.policy.Victim()   // takes + RELEASES the LRU lock, returns a hash
+	//   if !ok { return 0, false }   // policy has nothing to give (empty / all pinned)
+	//   return s.evict(h), true      // evict() takes the stripe lock (stripe -> lru order)
+	return 0, false
+}
+
+// sweepIdle evicts every entry whose last access (or creation, if never read) is older than
+// ttl, returning how many it removed. Called by the Evictor on its TTL ticker. ttl <= 0
+// disables the sweep (returns 0).
+//
+// Implementation note: do NOT delete while ranging a stripe's map under its own lock and also
+// calling back into the policy in a way that re-locks the same stripe — collect victim hashes
+// first (cheap, just [32]byte keys), release, then evict them via s.evict. Deleting from a Go
+// map during range of THAT map is allowed, but going through s.evict (which re-locks the
+// stripe) while already holding it is not. Two-pass keeps the lock discipline simple.
+func (s *Store) sweepIdle(ttl time.Duration) int {
+	if ttl <= 0 {
+		return 0
+	}
+	// TODO(hc):
+	//   cutoff := time.Now().Add(-ttl)
+	//   pass 1: for each stripe, RLock and collect hashes whose idle time exceeds ttl. Use
+	//           e.LastAccessed() (falls back to zero if never read — treat zero as "use
+	//           CreatedAt" so a written-but-never-read block can still age out).
+	//   pass 2: for each collected hash, call s.evict(h) (it takes the stripe lock itself).
+	//   return the count actually evicted.
+	return 0
 }

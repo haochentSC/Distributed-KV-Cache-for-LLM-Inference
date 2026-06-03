@@ -31,6 +31,10 @@ type Store struct {
 	hiFrac     float64
 	loFrac     float64
 	evictSig   chan struct{} // buffered(1): a coalesced "you have work" nudge to the Evictor
+
+	// now is the clock seam. It defaults to time.Now; tests override it so the TTL sweep and
+	// access-time bookkeeping are deterministic without time.Sleep (per .claude/rules/go-testing).
+	now func() time.Time
 }
 
 type stripe struct {
@@ -82,6 +86,7 @@ func NewStore(policy EvictionPolicy, opts ...StoreOption) *Store {
 		hiFrac:   defaultHiFrac,
 		loFrac:   defaultLoFrac,
 		evictSig: make(chan struct{}, 1),
+		now:      time.Now,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -168,7 +173,7 @@ func (s *Store) Get(model string, h BlockHash) (*Entry, bool) {
 	if !ok || e.ModelID != model {
 		return nil, false
 	}
-	e.recordAccess(time.Now()) // atomic — safe under the shared read lock
+	e.recordAccess(s.now()) // atomic — safe under the shared read lock
 	s.policy.RecordAccess(h)
 	return e, true
 }
@@ -207,7 +212,7 @@ func (s *Store) Put(h BlockHash, e *Entry) uint64 {
 	defer st.mu.Unlock()
 
 	version := uint64(1)
-	created := time.Now()
+	created := s.now()
 	var prevSize int64 // bytes the overwritten entry occupied (0 on first write)
 	if prev, ok := st.m[h]; ok {
 		version = prev.Version + 1
@@ -228,13 +233,13 @@ func (s *Store) Put(h BlockHash, e *Entry) uint64 {
 	st.m[h] = stored
 	s.policy.RecordWrite(h, stored.SizeBytes)
 
-	// TODO(hc): account for the bytes this write added or replaced, then nudge the Evictor.
-	//   - The DELTA is (new size - prev size): on a first write prevSize is 0 so we add the
-	//     whole thing; on an overwrite we add only the difference (which may be negative).
-	//   - Update the counter atomically: s.totalBytes.Add(stored.SizeBytes - prevSize)
-	//   - Then call s.signalEvict() so a write that crossed the high-water mark wakes the
-	//     drain loop. (signalEvict is a no-op when unbounded or below hiWater.)
-	_ = prevSize // delete this line once the TODO above is implemented
+	// Account for the DELTA this write moved the resident size by: on a first write prevSize is
+	// 0 so we add the whole entry; on an overwrite we add only (new - prev), which is negative
+	// when the new entry is smaller. atomic.Add because no single mutex covers the cross-stripe
+	// sum. Update the counter BEFORE signalling — signalEvict reads it to decide if we crossed
+	// the high-water mark (signal-first would read a stale, pre-write total and miss the trigger).
+	s.totalBytes.Add(stored.SizeBytes - prevSize)
+	s.signalEvict()
 	return version
 }
 
@@ -259,7 +264,7 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	created := time.Now()
+	created := s.now()
 	var prevSize int64 // bytes the superseded entry occupied (0 if none)
 	if prev, ok := st.m[h]; ok {
 		if prev.Version >= version {
@@ -285,10 +290,11 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 	st.m[h] = stored
 	s.policy.RecordWrite(h, stored.SizeBytes)
 
-	// TODO(hc): same accounting as Put — replication writes count toward the byte budget too.
-	//   s.totalBytes.Add(stored.SizeBytes - prevSize)
-	//   s.signalEvict()
-	_ = prevSize // delete this line once the TODO above is implemented
+	// Same accounting as Put — replication writes count toward the byte budget too, so a replica
+	// can hit its own watermark and evict independently of the primary (fine: cache data is
+	// eventually consistent, ADR 0013, and a replica miss is a recompute, never a violation).
+	s.totalBytes.Add(stored.SizeBytes - prevSize)
+	s.signalEvict()
 	return version
 }
 
@@ -305,8 +311,8 @@ func (s *Store) Delete(model string, h BlockHash) bool {
 	}
 	delete(st.m, h)
 	s.policy.RecordEvict(h)
-	// TODO(hc): a deleted entry frees its bytes — s.totalBytes.Add(-e.SizeBytes)
-	return true
+	s.totalBytes.Add(-e.SizeBytes) // a deleted entry frees its bytes; no signalEvict — freeing
+	return true                    // never creates pressure, only relieves it
 }
 
 // evict removes a block by hash REGARDLESS of model and returns the bytes it freed (0 if it
@@ -324,13 +330,14 @@ func (s *Store) evict(h BlockHash) int64 {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	// TODO(hc):
-	//   1. look up st.m[h]; if absent, return 0 (a concurrent Delete already removed it)
-	//   2. delete(st.m, h)
-	//   3. s.totalBytes.Add(-e.SizeBytes)
-	//   4. s.policy.RecordEvict(h)
-	//   5. return the freed byte count (e.SizeBytes)
-	return 0
+	e, ok := st.m[h]
+	if !ok {
+		return 0 // a concurrent Delete already removed it; nothing freed
+	}
+	delete(st.m, h)
+	s.totalBytes.Add(-e.SizeBytes)
+	s.policy.RecordEvict(h) // re-enters the lru lock: stripe -> lru, the program-wide order
+	return e.SizeBytes
 }
 
 // evictOne asks the policy for its next victim and evicts it, returning the bytes freed and
@@ -344,11 +351,11 @@ func (s *Store) evict(h BlockHash) int64 {
 // RecordEvict, so the LRU won't re-offer the same hash, and the Evictor breaks only on ok==false
 // (policy empty / all pinned) while otherwise re-checking Bytes(). So a 0-freed pass never spins.
 func (s *Store) evictOne() (freed int64, ok bool) {
-	// TODO(hc):
-	//   h, ok := s.policy.Victim()   // takes + RELEASES the LRU lock, returns a hash
-	//   if !ok { return 0, false }   // policy has nothing to give (empty / all pinned)
-	//   return s.evict(h), true      // evict() takes the stripe lock (stripe -> lru order)
-	return 0, false
+	h, ok := s.policy.Victim() // takes + RELEASES the lru lock before returning
+	if !ok {
+		return 0, false // policy has nothing to give (empty / all pinned)
+	}
+	return s.evict(h), true // evict() takes the stripe lock — stripe -> lru order preserved
 }
 
 // sweepIdle evicts every entry whose last access (or creation, if never read) is older than
@@ -364,12 +371,33 @@ func (s *Store) sweepIdle(ttl time.Duration) int {
 	if ttl <= 0 {
 		return 0
 	}
-	// TODO(hc):
-	//   cutoff := time.Now().Add(-ttl)
-	//   pass 1: for each stripe, RLock and collect hashes whose idle time exceeds ttl. Use
-	//           e.LastAccessed() (falls back to zero if never read — treat zero as "use
-	//           CreatedAt" so a written-but-never-read block can still age out).
-	//   pass 2: for each collected hash, call s.evict(h) (it takes the stripe lock itself).
-	//   return the count actually evicted.
-	return 0
+	cutoff := s.now().Add(-ttl)
+
+	// Pass 1: collect victims under each stripe's RLock. We gather just the 32-byte hashes (cheap)
+	// rather than evicting in place, because s.evict re-locks the stripe — calling it while we
+	// already hold the same stripe lock would deadlock. Collect-then-evict sidesteps that.
+	var victims []BlockHash
+	for _, st := range s.stripes {
+		st.mu.RLock()
+		for h, e := range st.m {
+			idleSince := e.LastAccessed()
+			if idleSince.IsZero() {
+				idleSince = e.CreatedAt // never read — age from when it was written
+			}
+			if idleSince.Before(cutoff) {
+				victims = append(victims, h)
+			}
+		}
+		st.mu.RUnlock()
+	}
+
+	// Pass 2: evict each collected hash. s.evict takes the stripe lock itself and tolerates a
+	// hash that raced away (returns 0) — count only those we actually removed.
+	n := 0
+	for _, h := range victims {
+		if s.evict(h) > 0 {
+			n++
+		}
+	}
+	return n
 }

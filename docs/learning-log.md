@@ -16,6 +16,48 @@
 
 ---
 
+## Phase 4 - Eviction, observability & chaos
+
+### 2026-06-03 - LRU baseline + watermark eviction: policy vs. mechanism, and the lock order that ties them
+**Phase:** 4 (Sub-stages A-C)
+**What I was doing:** Built the full eviction core behind the existing `EvictionPolicy` seam — the
+LRU baseline (`LRUPolicy`, list+map), byte accounting on the Store (atomic delta), the background
+`Evictor` (watermark pressure drain + TTL sweep), and the reject-fast write-admission guard
+(ADR 0017). Captured in ADR 0024.
+**What I learned / what broke:**
+- **Policy and mechanism are different jobs, and keeping them apart is the whole point.** The
+  policy answers "which block?" (ordering only — size-blind, cost-blind); the Store answers "are
+  we over budget?" (bytes) and the Evictor answers "when?" (watermarks). LRU stays a clean
+  reference number because it owns *only* ordering. The Phase 5 GDSF/DRF policy slots into the
+  same seam without touching the Store or the gRPC API.
+- **The byte counter MUST be atomic, not a locked int.** There is no single mutex over the
+  cross-stripe sum, and the evictor reads it without any stripe lock. A plain `int64` guarded by
+  per-stripe mutexes would be a data race on the total. `atomic.Int64` + a delta (`new - prev`,
+  negative on a shrinking overwrite) is the correct shape.
+- **Lock order is the load-bearing invariant.** Everything takes stripe -> lru, never the reverse.
+  `Victim()` takes *and releases* the lru lock before `evictOne` calls `evict` (which re-takes the
+  lru lock via `RecordEvict` under the stripe lock). Holding the lru lock across a stripe lock
+  would invert the order and deadlock. Concentrating the "ask policy then delete" sequence in
+  `evictOne` is what makes the order auditable in one place.
+- **Hysteresis is not optional.** Evicting to exactly max means every boundary write triggers a
+  drain (thrash). The hi(0.90)/lo(0.75) gap amortises it; the buffered(1) signal coalesces a burst
+  of nudges into one drain.
+- **Testing time needs a seam.** TTL eviction depends on `time.Now`, which is non-deterministic
+  and the testing rules forbid `time.Sleep` for sync. Added a `Store.now` clock (default
+  `time.Now`, overridden in tests) — a textbook "mock the external boundary" move that made
+  `TestStore_SweepIdle` deterministic.
+- **Couldn't run `-race` here.** Windows lacks 64-bit cgo and the only WSL distro is
+  `docker-desktop` (no Go), so the formal concurrency proof still has to be run in a real WSL2 Go
+  env: `go test ./internal/cache -race`.
+**Why it matters / what I'd redo:** The split (policy/budget/timing) is the reusable lesson — it's
+what lets the headline Phase 5 policy be a drop-in. The one thing to revisit early in Phase 5: the
+`Victim()` signature is too thin (no tenant, no free-amount) for DRF fairness; extend the seam
+before building GDSF rather than after.
+**Links:** ADR 0024 (+ 0007, 0013, 0017); `internal/cache/{lru,evictor,store}.go`,
+`internal/cache/eviction_test.go`, `internal/server/server.go`.
+
+---
+
 ## Phase 3 - Replication, failover & etcd coordination
 
 ### 2026-05-28 - RF=2 + implicit promotion + Spot drain: Phase 3 collapses into one mechanism

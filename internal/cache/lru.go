@@ -45,6 +45,11 @@ func NewLRU() *LRUPolicy {
 // yet, this is a no-op — a read can't precede the write that inserts it, but be defensive.
 func (p *LRUPolicy) RecordAccess(h BlockHash) {
 	// TODO(hc): lock p.mu; if e := p.items[h] exists, p.ll.MoveToFront(e).
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if e, ok := p.items[h]; ok {
+		p.ll.MoveToFront(e)
+	}
 }
 
 // RecordWrite inserts h (or moves it to front on overwrite) as most-recently-used. size is
@@ -53,12 +58,26 @@ func (p *LRUPolicy) RecordWrite(h BlockHash, size int64) {
 	// TODO(hc): lock p.mu.
 	//   if e := p.items[h] exists -> MoveToFront(e)
 	//   else -> e := p.ll.PushFront(&lruItem{key: h}); p.items[h] = e
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if e, ok := p.items[h]; ok {
+		p.ll.MoveToFront(e)
+	} else {
+		e = p.ll.PushFront(&lruItem{key: h})
+		p.items[h] = e
+	}
 }
 
 // RecordEvict drops h from the policy's bookkeeping. Called by Store.Delete and Store.evict
 // AFTER the entry is gone from the map, so the two views stay consistent. No-op if untracked.
 func (p *LRUPolicy) RecordEvict(h BlockHash) {
 	// TODO(hc): lock p.mu; if e := p.items[h] exists -> p.ll.Remove(e); delete(p.items, h).
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if e, ok := p.items[h]; ok {
+		p.ll.Remove(e)
+		delete(p.items, h)
+	}
 }
 
 // Victim returns the least-recently-used block, or ok=false if the policy is empty. It does
@@ -67,5 +86,11 @@ func (p *LRUPolicy) RecordEvict(h BlockHash) {
 func (p *LRUPolicy) Victim() (BlockHash, bool) {
 	// TODO(hc): lock p.mu; e := p.ll.Back(); if e == nil return BlockHash{}, false;
 	//           return e.Value.(*lruItem).key, true.
-	return BlockHash{}, false
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e := p.ll.Back()
+	if e == nil {
+		return BlockHash{}, false
+	}
+	return e.Value.(*lruItem).key, true
 }

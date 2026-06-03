@@ -39,15 +39,18 @@ func (e *Evictor) Run(ctx context.Context) {
 			return
 
 		case <-e.store.EvictSignal():
-			// TODO(hc): PRESSURE drain. Free until we're back under the low-water mark:
-			//   for e.store.Bytes() > e.store.LowWater() {
-			//       if _, ok := e.store.evictOne(); !ok { break } // policy ran dry; avoid spin
-			//   }
-			// Note: evictOne already enforces the stripe->lru lock order. The `break` on !ok is
-			// essential — without it a wedged/empty policy spins this goroutine hot.
+			// PRESSURE drain: a write crossed the high-water mark. Free down to the low-water
+			// mark — the hi/lo gap is the hysteresis that stops evict-one/write-one thrashing.
+			for e.store.Bytes() > e.store.LowWater() {
+				if _, ok := e.store.evictOne(); !ok {
+					break // policy ran dry (empty / all pinned); break or we spin this goroutine hot
+				}
+			}
 
 		case <-ticker.C:
-			// TODO(hc): TTL sweep. e.store.sweepIdle(e.ttl) (no-op when ttl <= 0).
+			// TTL sweep: drop entries idle longer than ttl, regardless of pressure. No-op when
+			// ttl <= 0 (sweepIdle guards it), so this case is harmless even with TTL disabled.
+			e.store.sweepIdle(e.ttl)
 		}
 	}
 }

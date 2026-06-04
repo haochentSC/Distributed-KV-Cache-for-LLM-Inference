@@ -18,6 +18,38 @@
 
 ## Phase 4 - Eviction, observability & chaos
 
+### 2026-06-04 - Grafana dashboards: PromQL is where raw counters become a story
+**Phase:** 4 (Sub-stage F)
+**What I was doing:** Built a local-first observability stack under `deploy/observability/` — a
+docker-compose of Prometheus + Grafana with an auto-provisioned datasource and a 10-panel
+"KV Cache — Overview" dashboard driven by the Sub-stage E metrics.
+**What I learned / what broke:**
+- **A histogram is useless without `histogram_quantile` + `rate` over `le`.** The server exposes
+  `..._bucket` cumulative counters; a latency percentile is
+  `histogram_quantile(0.99, sum by (le, method) (rate(..._bucket[$__rate_interval])))`. The `sum by
+  (le)` is what aggregates buckets across instances before the quantile — quantiles don't average,
+  so you must combine the raw buckets first, not the per-node p99s.
+- **Rates, not raw counters, on a dashboard.** Counters only ever climb; `rate(...[window])`
+  turns them into the per-second view a human reads. `$__rate_interval` (a Grafana built-in) sizes
+  the window to the scrape interval automatically, so the same JSON is correct at any scrape rate.
+- **Provisioning = no clicks, survives a fresh container.** A fixed datasource `uid` ("prometheus")
+  referenced by the dashboard JSON is what makes the wiring reproducible; a file provider loads the
+  dashboard on boot. This is the difference between a demo I rebuild each time and infra-as-code.
+- **A real port collision.** The cache-server's metrics endpoint and Prometheus both want 9090;
+  mapped Prometheus to host 9091 and scraped the host via `host.docker.internal` (with a
+  `host-gateway` extra_hosts so it also works on Linux, not just Docker Desktop).
+- **Local-first is a deliberate deviation.** The plan deploys on AWS from Phase 2 (ADR 0006), but
+  iterating PromQL/panels against a live local node beats a `terraform apply` loop. Same dashboard
+  JSON ships to the cloud later — the artifact is portable, only the scrape targets change.
+**Why it matters / what I'd redo:** The transferable skill is reading a histogram correctly in
+PromQL — it's the single most-flubbed thing in Prometheus interviews. Next time I'd add a couple of
+recording rules for the hit-rate ratio so the dashboard query is cheaper, but it's premature at one
+node. Sub-stage G (CloudWatch logs + alarms) is the remaining observability bullet.
+**Links:** ADR 0025; `deploy/observability/` (compose, prometheus.yml, grafana provisioning +
+`kvcache-overview.json`).
+
+---
+
 ### 2026-06-04 - Prometheus instrumentation: keeping infra out of the core, and the cardinality trap
 **Phase:** 4 (Sub-stage E)
 **What I was doing:** Instrumented the node for Prometheus — a new `internal/metrics` package with

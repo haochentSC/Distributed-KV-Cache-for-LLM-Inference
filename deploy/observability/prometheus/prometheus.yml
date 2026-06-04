@@ -1,0 +1,14 @@
+# Prometheus scrape config for the local KV-cache observability stack.
+# A 5s interval matches the cache-server's gauge poller (main.go) so the resident/queue gauges
+# don't look staler than they are. Tighten only if you need finer resolution for a benchmark.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # One cache-server running on the host. For a multi-node local cluster, add each node's
+  # advertise host:metrics-port as another target here (or switch to file_sd/EC2 SD on AWS).
+  - job_name: kvcache
+    static_configs:
+      - targets:
+          - "host.docker.internal:9090"

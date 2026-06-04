@@ -1,0 +1,48 @@
+# Local-first observability stack for the KV cache (Phase 4, Sub-stage F).
+#
+# Prometheus scrapes a cache-server's /metrics endpoint and Grafana auto-loads a provisioned
+# datasource + the kvcache-overview dashboard. This is a LOCAL DEV harness: the production
+# cluster ships these same dashboards on AWS (the project deploys via Terraform from Phase 2 on,
+# ADR 0006), but iterating on PromQL/panels against a real running node is far faster locally.
+#
+# Usage:
+#   1. Run a cache-server on the host with metrics enabled (the default):
+#        go run ./cmd/cache-server -max-bytes 64000000 -ttl 5m
+#      (any -max-bytes/-ttl is fine; metrics are exposed regardless on :9090.)
+#   2. docker compose -f deploy/observability/docker-compose.yml up
+#   3. Grafana:    http://localhost:3000  (anonymous admin; dashboard "KV Cache — Overview")
+#      Prometheus: http://localhost:9091  (mapped off 9090 to avoid colliding with the
+#                  cache-server's own :9090 metrics port on the host)
+#   4. Drive traffic: go run ./cmd/loadgen   — panels should come alive within a scrape or two.
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: kvc-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+    # host.docker.internal resolves to the host on Docker Desktop automatically; on Linux this
+    # mapping makes it work too, so the scrape target (the cache-server on the host) is reachable.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: kvc-grafana
+    environment:
+      # Dev-only: anonymous Admin so the dashboard opens with no login. Do NOT reuse on a shared
+      # network — this is for a laptop scrape of a local node.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus

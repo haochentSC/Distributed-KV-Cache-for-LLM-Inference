@@ -1,0 +1,12 @@
+# Tells Grafana to load every dashboard JSON under the mounted dashboards dir on startup, so the
+# kvcache-overview dashboard appears with no manual import.
+apiVersion: 1
+
+providers:
+  - name: kvcache
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

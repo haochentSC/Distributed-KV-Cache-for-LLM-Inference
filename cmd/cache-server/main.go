@@ -8,6 +8,7 @@ import (
 	"flag"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/haochentSC/distributed-kv-cache/internal/cache"
 	"github.com/haochentSC/distributed-kv-cache/internal/cluster"
 	"github.com/haochentSC/distributed-kv-cache/internal/coord"
+	"github.com/haochentSC/distributed-kv-cache/internal/metrics"
 	"github.com/haochentSC/distributed-kv-cache/internal/server"
 	"github.com/haochentSC/distributed-kv-cache/internal/spot"
 )
@@ -41,6 +43,7 @@ func main() {
 	loWater := flag.Float64("lo-water", 0.75, "low-water fraction of -max-bytes the evictor frees down to")
 	ttl := flag.Duration("ttl", 0, "idle TTL: evict blocks not read within this window; 0 disables the TTL sweep")
 	evictSweep := flag.Duration("evict-sweep", 30*time.Second, "how often the TTL sweep runs")
+	metricsAddr := flag.String("metrics-addr", ":9090", "address for the Prometheus /metrics endpoint; empty disables it")
 	flag.Parse()
 
 	// Surface watermark misconfiguration loudly: the Store would otherwise silently clamp a bad
@@ -68,13 +71,20 @@ func main() {
 		cache.WithWatermarks(*hiWater, *loWater),
 	)
 
-	// ctx bounds the membership watch + replicator + evictor goroutines; cancelled on shutdown.
+	// Process-wide Prometheus instrumentation (ADR 0025). One *Metrics owns a private registry;
+	// it feeds the gRPC interceptors, the evictor's reason counter, the server/replicator event
+	// counters, and the polled resident/queue gauges below. Cheap to build even when -metrics-addr
+	// is empty (the collectors just never get scraped).
+	m := metrics.New()
+
+	// ctx bounds the membership watch + replicator + evictor + metrics-poller goroutines.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	// The background evictor handles memory pressure (watermark drain) and TTL expiry. It is a
-	// no-op until -max-bytes/-ttl are set, so it's always safe to start.
-	go cache.NewEvictor(store, *ttl, *evictSweep).Run(ctx)
+	// no-op until -max-bytes/-ttl are set, so it's always safe to start. m.Eviction counts what
+	// it frees, by reason (pressure|ttl).
+	go cache.NewEvictor(store, *ttl, *evictSweep, m.Eviction).Run(ctx)
 
 	// Register into etcd membership (optional). release() deregisters by revoking the lease.
 	// With etcd configured we ALSO watch membership ourselves and run a Replicator: as the
@@ -103,22 +113,64 @@ func main() {
 				log.Fatalf("watch members: %v", err)
 			}
 			go coord.DriveRouter(ctx, snaps, router) // keep the router's view current
-			repl = server.NewReplicator(id, *rf, router)
+			repl = server.NewReplicator(id, *rf, router).WithMetrics(m)
 			go repl.Run(ctx)
 			log.Printf("replication enabled: rf=%d, self=%q", *rf, id)
 		}
 	}
 
 	// NewWithReplicator only when replication is on; otherwise a plain single-node Server.
+	// Either way attach metrics so Lookup/Fetch hit-miss and manual Evicts are counted.
 	var srv *server.Server
 	if repl != nil {
 		srv = server.NewWithReplicator(store, repl)
 	} else {
 		srv = server.New(store)
 	}
+	srv.WithMetrics(m)
 
-	gs := grpc.NewServer()
+	// Chain the metrics interceptors so EVERY RPC's latency + per-code count is recorded in one
+	// place, no per-handler bookkeeping (ADR 0025). Unary covers Lookup/Evict/Health; stream
+	// covers Fetch/Write/Replicate.
+	gs := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(m.UnaryInterceptor()),
+		grpc.ChainStreamInterceptor(m.StreamInterceptor()),
+	)
 	kvcachev1.RegisterKVCacheServer(gs, srv)
+
+	// Expose Prometheus metrics on a SEPARATE HTTP port (the gRPC port speaks HTTP/2 framing, so
+	// a scraper can't share it). Empty -metrics-addr disables the endpoint (e.g. local runs).
+	if *metricsAddr != "" {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", m.Handler())
+		ms := &http.Server{Addr: *metricsAddr, Handler: mux}
+		go func() {
+			log.Printf("metrics endpoint on %s/metrics", *metricsAddr)
+			if err := ms.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("metrics server: %v", err) // non-fatal: metrics down must not kill the cache
+			}
+		}()
+		defer ms.Close()
+	}
+
+	// Poll the gauges that are LEVELS, not events: resident size/entries and the replication
+	// backlog. Polling (vs updating on every write) keeps the hot path metrics-free and is the
+	// natural shape for a gauge — Prometheus only samples at scrape time anyway.
+	go func() {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				m.SetResident(store.Bytes(), store.Len())
+				if repl != nil {
+					m.SetReplicaQueueDepth(repl.QueueDepth())
+				}
+			}
+		}
+	}()
 
 	lis, err := net.Listen("tcp", *addr)
 	if err != nil {

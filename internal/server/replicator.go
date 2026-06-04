@@ -56,10 +56,11 @@ type ReplicaJob struct {
 // Replicator forwards freshly-written blocks from this primary to their replica(s).
 // One per cache-server. Construct with NewReplicator, then Run it in a goroutine.
 type Replicator struct {
-	self   string          // this node's ring ID — never replicate to ourselves
-	rf     int             // replication factor (2 = primary + 1 replica)
-	router *cluster.Router // shared ring + connection pool (OwnersN, ConnFor)
-	queue  chan ReplicaJob
+	self    string          // this node's ring ID — never replicate to ourselves
+	rf      int             // replication factor (2 = primary + 1 replica)
+	router  *cluster.Router // shared ring + connection pool (OwnersN, ConnFor)
+	queue   chan ReplicaJob
+	metrics metricsSink // never nil; noopMetrics until WithMetrics is called (ADR 0025)
 }
 
 // NewReplicator builds a Replicator. self must be the SAME node ID this server registers in
@@ -67,12 +68,27 @@ type Replicator struct {
 // watch drives (so the server's view of placement matches the clients'). [scaffold]
 func NewReplicator(self string, rf int, router *cluster.Router) *Replicator {
 	return &Replicator{
-		self:   self,
-		rf:     rf,
-		router: router,
-		queue:  make(chan ReplicaJob, replicaQueueDepth),
+		self:    self,
+		rf:      rf,
+		router:  router,
+		queue:   make(chan ReplicaJob, replicaQueueDepth),
+		metrics: noopMetrics{},
 	}
 }
+
+// WithMetrics installs a metrics sink (main wires the process-wide *metrics.Metrics). A nil m
+// is ignored, keeping the noop default. Returns the Replicator for chaining.
+func (r *Replicator) WithMetrics(m metricsSink) *Replicator {
+	if m != nil {
+		r.metrics = m
+	}
+	return r
+}
+
+// QueueDepth reports the current replication backlog (0..replicaQueueDepth). main polls it on a
+// ticker for the replication_queue_depth gauge — a rising depth is the proxy for replication lag
+// in this async-drop design. len on a buffered channel is a safe, lock-free snapshot.
+func (r *Replicator) QueueDepth() int { return len(r.queue) }
 
 // Enqueue schedules job for async replication. It is NON-BLOCKING: if the queue is full it
 // DROPS the job (and should log it), because blocking here would stall the Write ack on a
@@ -83,6 +99,7 @@ func (r *Replicator) Enqueue(job ReplicaJob) {
 	default:
 		// Drop > block: a slow replica must not stall the Write ack path (ADR 0017). A dropped
 		// copy is at worst a future recompute, never a correctness violation (ADR 0013).
+		r.metrics.Replica("dropped")
 		log.Printf("replicator: queue full, dropping block %x v%d", job.Hash[:6], job.Version)
 	}
 }
@@ -124,7 +141,10 @@ func (r *Replicator) forward(ctx context.Context, job ReplicaJob) {
 		if err := r.sendOne(ctx, conn, job); err != nil {
 			// Best-effort: every error path is log-and-continue. A failed copy is a future
 			// recompute, not a fault to surface (ADR 0013 + ADR 0017).
+			r.metrics.Replica("error")
 			log.Printf("replicator: forward to %s for %x v%d: %v", id, job.Hash[:6], job.Version, err)
+		} else {
+			r.metrics.Replica("forwarded")
 		}
 	}
 }

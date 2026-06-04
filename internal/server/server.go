@@ -24,21 +24,52 @@ type replicaEnqueuer interface {
 	Enqueue(job ReplicaJob)
 }
 
+// metricsSink receives operational counters from the gRPC handlers. It is a narrow interface
+// (not a concrete *metrics.Metrics) so this package stays decoupled from Prometheus and tests
+// can pass a fake; *metrics.Metrics satisfies it (ADR 0025). The replicator uses the Replica
+// method too — see replicator.go. nil is never stored: New* default to noopMetrics, so the
+// handlers can call s.metrics.* unconditionally.
+type metricsSink interface {
+	Hit(op string)
+	Miss(op string)
+	Eviction(reason string, n int)
+	Replica(result string)
+}
+
+// noopMetrics is the default sink: every method is a no-op, so a Server built without metrics
+// (the test/single-node path) needs no nil checks on the hot path.
+type noopMetrics struct{}
+
+func (noopMetrics) Hit(string)           {}
+func (noopMetrics) Miss(string)          {}
+func (noopMetrics) Eviction(string, int) {}
+func (noopMetrics) Replica(string)       {}
+
 // Server implements the generated kvcachev1.KVCacheServer. Embedding the
 // Unimplemented base makes future RPC additions non-breaking.
 type Server struct {
 	kvcachev1.UnimplementedKVCacheServer
-	store *cache.Store
-	repl  replicaEnqueuer // nil on a single node (no replication); set in Phase 3 Sub-stage B
+	store   *cache.Store
+	repl    replicaEnqueuer // nil on a single node (no replication); set in Phase 3 Sub-stage B
+	metrics metricsSink     // never nil; noopMetrics until WithMetrics is called
 }
 
 // New wires a Server to a Store with NO replication (single-node / tests).
-func New(store *cache.Store) *Server { return &Server{store: store} }
+func New(store *cache.Store) *Server { return &Server{store: store, metrics: noopMetrics{}} }
 
 // NewWithReplicator wires a Server that, after each successful Write (it is the PRIMARY for
 // that block), hands the block to repl for async forwarding to the replica (ADR 0021).
 func NewWithReplicator(store *cache.Store, repl replicaEnqueuer) *Server {
-	return &Server{store: store, repl: repl}
+	return &Server{store: store, repl: repl, metrics: noopMetrics{}}
+}
+
+// WithMetrics installs a metrics sink and returns the Server for chaining (main wires the
+// process-wide *metrics.Metrics here). A nil m is ignored, keeping the noop default.
+func (s *Server) WithMetrics(m metricsSink) *Server {
+	if m != nil {
+		s.metrics = m
+	}
+	return s
 }
 
 // toBlockHash converts a wire []byte to a cache.BlockHash, rejecting wrong lengths.
@@ -66,7 +97,12 @@ func (s *Server) Lookup(ctx context.Context, req *kvcachev1.LookupRequest) (*kvc
 				bp.HasEntry = true
 				bp.Version = e.Version
 				bp.SizeBytes = uint64(e.SizeBytes)
+				s.metrics.Hit("lookup")
+			} else {
+				s.metrics.Miss("lookup")
 			}
+		} else {
+			s.metrics.Miss("lookup") // a malformed hash is, from the cache's view, a miss
 		}
 		blocks[i] = bp
 	}
@@ -83,8 +119,10 @@ func (s *Server) Fetch(req *kvcachev1.FetchRequest, stream kvcachev1.KVCache_Fet
 	}
 	e, hit := s.store.Get(req.GetModelId(), h)
 	if !hit {
+		s.metrics.Miss("fetch")
 		return status.Error(codes.NotFound, "block not cached")
 	}
+	s.metrics.Hit("fetch")
 	if v := req.GetVersion(); v != 0 && v != e.Version {
 		return status.Error(codes.NotFound, "requested version not available")
 	}
@@ -241,7 +279,11 @@ func (s *Server) Evict(ctx context.Context, req *kvcachev1.EvictRequest) (*kvcac
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, "block_hash must be 32 bytes")
 	}
-	return &kvcachev1.EvictResponse{Evicted: s.store.Delete(req.GetModelId(), h)}, nil
+	evicted := s.store.Delete(req.GetModelId(), h)
+	if evicted {
+		s.metrics.Eviction("manual", 1) // an explicit Evict RPC, distinct from pressure/ttl
+	}
+	return &kvcachev1.EvictResponse{Evicted: evicted}, nil
 }
 
 // Health is a trivial liveness/readiness probe.

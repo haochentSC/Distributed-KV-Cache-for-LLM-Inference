@@ -18,12 +18,27 @@ type Evictor struct {
 	store      *Store
 	ttl        time.Duration // idle TTL; 0 disables TTL sweeping
 	sweepEvery time.Duration // how often the TTL sweep runs
+
+	// onEvict is an optional metrics hook: after a pressure drain or a TTL sweep removes
+	// entries, the Evictor reports how many and why (reason "pressure" or "ttl"). It is a plain
+	// func, not an interface, so internal/cache stays free of any Prometheus import — main wires
+	// it to internal/metrics.Eviction (ADR 0025). nil = no instrumentation (the default).
+	onEvict func(reason string, n int)
 }
 
 // NewEvictor builds an Evictor. ttl <= 0 disables the TTL sweep (pressure eviction still runs).
-// sweepEvery should be > 0 when ttl is set; a sane default is 30s.
-func NewEvictor(store *Store, ttl, sweepEvery time.Duration) *Evictor {
-	return &Evictor{store: store, ttl: ttl, sweepEvery: sweepEvery}
+// sweepEvery should be > 0 when ttl is set; a sane default is 30s. onEvict may be nil (no
+// metrics); pass metrics.Eviction to count evictions by reason.
+func NewEvictor(store *Store, ttl, sweepEvery time.Duration, onEvict func(reason string, n int)) *Evictor {
+	return &Evictor{store: store, ttl: ttl, sweepEvery: sweepEvery, onEvict: onEvict}
+}
+
+// report fires the onEvict hook when it is set and something was actually freed. Centralised so
+// the two trigger cases don't each repeat the nil/zero guard.
+func (e *Evictor) report(reason string, n int) {
+	if e.onEvict != nil && n > 0 {
+		e.onEvict(reason, n)
+	}
 }
 
 // Run is the loop. It blocks until ctx is cancelled. Start it in a goroutine.
@@ -41,16 +56,19 @@ func (e *Evictor) Run(ctx context.Context) {
 		case <-e.store.EvictSignal():
 			// PRESSURE drain: a write crossed the high-water mark. Free down to the low-water
 			// mark — the hi/lo gap is the hysteresis that stops evict-one/write-one thrashing.
+			n := 0
 			for e.store.Bytes() > e.store.LowWater() {
 				if _, ok := e.store.evictOne(); !ok {
 					break // policy ran dry (empty / all pinned); break or we spin this goroutine hot
 				}
+				n++
 			}
+			e.report("pressure", n)
 
 		case <-ticker.C:
 			// TTL sweep: drop entries idle longer than ttl, regardless of pressure. No-op when
 			// ttl <= 0 (sweepIdle guards it), so this case is harmless even with TTL disabled.
-			e.store.sweepIdle(e.ttl)
+			e.report("ttl", e.store.sweepIdle(e.ttl))
 		}
 	}
 }

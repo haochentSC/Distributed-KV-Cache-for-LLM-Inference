@@ -18,6 +18,44 @@
 
 ## Phase 4 - Eviction, observability & chaos
 
+### 2026-06-04 - Prometheus instrumentation: keeping infra out of the core, and the cardinality trap
+**Phase:** 4 (Sub-stage E)
+**What I was doing:** Instrumented the node for Prometheus — a new `internal/metrics` package with
+its own registry, a pair of gRPC interceptors for latency/per-code counts, hit/miss + eviction +
+replication counters, polled resident/queue gauges, and a `/metrics` endpoint. Captured in ADR 0025.
+**What I learned / what broke:**
+- **Label cardinality is the failure mode, not CPU.** Every distinct label-value combination is a
+  separate time series held in the scraper's RAM. Labelling a high-volume counter with `model_id`
+  or `block_hash` lets traffic mint unbounded series and OOM the target — the exact thing eviction
+  exists to prevent, recreated in the metrics layer. So labels are *only* bounded sets (method,
+  code, op, result, reason). The discipline is counterintuitive: fewer label dimensions is safer.
+- **The same seam trick as eviction, again.** To keep `internal/cache` free of Prometheus, the
+  Evictor takes an injected `onEvict(reason, n)` *func* (not even an interface), and the server
+  defines its own narrow `metricsSink`. `*metrics.Metrics` satisfies both — `m.Eviction` is passed
+  straight to `NewEvictor`. Same lesson as ADR 0024's policy seam: push infra to the edge, keep the
+  core a pure library.
+- **Private registry > global.** promauto's global registry is process-wide mutable state; a second
+  `New()` or a test re-registering a name panics. A `prometheus.NewRegistry()` per `*Metrics` makes
+  it an ordinary value and lets the tests read series with `testutil.ToFloat64` in isolation.
+- **One interceptor beats N instrumented handlers.** A unary + a stream interceptor record
+  `(method, code, latency)` for every RPC centrally — no handler bookkeeping, and new RPCs are
+  covered for free. `status.Code(nil) == OK`, so successes count without a special case.
+- **Gauges are polled, counters are pushed.** Levels (resident bytes/entries, queue depth) are
+  sampled on a 5 s ticker so the hot write path stays metrics-free; events (hit/evict/replica) fire
+  inline. Matching the metric *type* to push-vs-poll kept the write path clean.
+- **"Replication lag" was the wrong noun.** This replicator drops under pressure, so there's no
+  apply-time to measure without wire timestamps. Queue depth + dropped/error counts are the honest
+  health signal; I named the gauge for what it is and deferred true lag.
+**Why it matters / what I'd redo:** The cardinality rule is the transferable one — it's the single
+most common way real Prometheus deployments fall over. Recurring friction to fix properly: every
+Windows commit trips the pre-commit `gofmt -l` because `core.autocrlf` rewrites the working tree to
+CRLF while the index is LF. The durable fix is a `.gitattributes` (`*.go text eol=lf`) +
+`git add --renormalize`, raised as a separate change.
+**Links:** ADR 0025 (+ 0007, 0013, 0017, 0021); `internal/metrics/`, `internal/cache/evictor.go`,
+`internal/server/{server,replicator}.go`, `cmd/cache-server/main.go`.
+
+---
+
 ### 2026-06-03 - LRU baseline + watermark eviction: policy vs. mechanism, and the lock order that ties them
 **Phase:** 4 (Sub-stages A-C)
 **What I was doing:** Built the full eviction core behind the existing `EvictionPolicy` seam — the

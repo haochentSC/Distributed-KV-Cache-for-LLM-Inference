@@ -1,0 +1,19 @@
+# Normalize line endings. The repo stores LF; these rules also force LF in the WORKING TREE
+# (eol=lf) for files where CRLF would break things on Linux or trip tooling on Windows.
+
+# Shell scripts + cloud-init templates run on Linux EC2 — CRLF (\r) breaks the shebang/bash.
+*.sh    text eol=lf
+*.tftpl text eol=lf
+
+# Go sources: LF keeps `gofmt -l` from flagging CRLF files on Windows (the pre-commit friction).
+*.go text eol=lf
+
+# Terraform + docs: LF for consistency.
+*.tf   text eol=lf
+*.hcl  text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Let Git auto-detect everything else.
+*      text=auto

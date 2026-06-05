@@ -1,0 +1,5 @@
+# Copy to backend.hcl and fill in from `terraform -chdir=../bootstrap output`.
+# Then: terraform init -backend-config=backend.hcl
+bucket         = "kvcache-tfstate-REPLACE-WITH-ACCOUNT-ID"
+dynamodb_table = "kvcache-tflock"
+region         = "us-east-1"

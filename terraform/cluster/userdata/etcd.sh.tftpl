@@ -1,0 +1,46 @@
+#!/bin/bash
+# etcd node bootstrap (Amazon Linux 2023). Templated values: node_index, node_ip, initial_cluster.
+# $${VAR} escapes the template so the literal $VAR reaches bash; ${node_ip} etc. are substituted now.
+set -euxo pipefail
+
+ETCD_VER=v3.5.17
+ARCH=amd64
+cd /tmp
+curl -fsSL -o etcd.tar.gz "https://github.com/etcd-io/etcd/releases/download/$${ETCD_VER}/etcd-$${ETCD_VER}-linux-$${ARCH}.tar.gz"
+tar xzf etcd.tar.gz
+install -m 0755 "etcd-$${ETCD_VER}-linux-$${ARCH}/etcd" /usr/local/bin/etcd
+install -m 0755 "etcd-$${ETCD_VER}-linux-$${ARCH}/etcdctl" /usr/local/bin/etcdctl
+
+id etcd >/dev/null 2>&1 || useradd --system --no-create-home --shell /sbin/nologin etcd
+mkdir -p /var/lib/etcd
+chown -R etcd:etcd /var/lib/etcd
+
+cat >/etc/systemd/system/etcd.service <<UNIT
+[Unit]
+Description=etcd
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=etcd
+Type=notify
+ExecStart=/usr/local/bin/etcd \
+  --name etcd-${node_index} \
+  --data-dir /var/lib/etcd \
+  --listen-client-urls http://0.0.0.0:2379 \
+  --advertise-client-urls http://${node_ip}:2379 \
+  --listen-peer-urls http://0.0.0.0:2380 \
+  --initial-advertise-peer-urls http://${node_ip}:2380 \
+  --initial-cluster ${initial_cluster} \
+  --initial-cluster-state new \
+  --initial-cluster-token kvcache-etcd
+Restart=always
+RestartSec=5
+LimitNOFILE=40000
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now etcd

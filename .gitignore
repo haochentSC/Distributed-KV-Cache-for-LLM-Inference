@@ -10,6 +10,7 @@ coverage.*
 *.tfstate
 *.tfstate.*
 *.tfvars        # may contain secrets; commit *.tfvars.example instead
+backend.hcl     # env-specific backend config; commit backend.hcl.example instead
 crash.log
 
 # Python (vLLM connector)

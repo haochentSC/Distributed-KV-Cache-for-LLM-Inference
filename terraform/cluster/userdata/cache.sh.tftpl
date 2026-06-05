@@ -1,0 +1,63 @@
+#!/bin/bash
+# Cache node bootstrap (Amazon Linux 2023): install Docker, pull the cache image from ECR, and run
+# it under systemd via a small wrapper that resolves this instance's id + private IP at start time.
+# Templated: region, ecr_registry, ecr_image, etcd_endpoints, cold_bucket, max_bytes, rf, lease_ttl,
+# log_group. templatefile substitutes ${...}; $${...} reaches the files as a literal $... .
+set -euxo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+# Authenticate to ECR and pull the image (creds from the instance role — no static keys).
+aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${ecr_registry}
+docker pull ${ecr_image}
+
+# Runtime wrapper: a single-quoted heredoc so the $${...} shell vars stay literal and expand when
+# the SERVICE starts (IMDSv2 for the instance id + private advertise IP).
+cat >/usr/local/bin/run-cache-server.sh <<'WRAPPER'
+#!/bin/bash
+set -euo pipefail
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 120")
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $${TOKEN}" http://169.254.169.254/latest/meta-data/instance-id)
+PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $${TOKEN}" http://169.254.169.254/latest/meta-data/local-ipv4)
+exec docker run --rm --name cache-server --network host \
+  --log-driver=awslogs \
+  --log-opt awslogs-region=${region} \
+  --log-opt awslogs-group=${log_group} \
+  --log-opt "awslogs-stream=$${INSTANCE_ID}" \
+  ${ecr_image} \
+  -addr :50051 \
+  -advertise "$${PRIVATE_IP}:50051" \
+  -node-id "$${INSTANCE_ID}" \
+  -etcd ${etcd_endpoints} \
+  -rf ${rf} \
+  -lease-ttl ${lease_ttl} \
+  -max-bytes ${max_bytes} \
+  -metrics-addr :9090 \
+  -spot \
+  -cold-bucket ${cold_bucket}
+WRAPPER
+chmod +x /usr/local/bin/run-cache-server.sh
+
+# systemd unit. ExecStop's `docker stop` sends SIGTERM to the container → the deregister-then-drain
+# path (ADR 0023); TimeoutStopSec gives the drain room beyond docker's 120s grace.
+cat >/etc/systemd/system/cache-server.service <<'UNIT'
+[Unit]
+Description=kvcache cache-server
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStopSec=130
+ExecStartPre=-/usr/bin/docker rm -f cache-server
+ExecStart=/usr/local/bin/run-cache-server.sh
+ExecStop=/usr/bin/docker stop -t 120 cache-server
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now cache-server

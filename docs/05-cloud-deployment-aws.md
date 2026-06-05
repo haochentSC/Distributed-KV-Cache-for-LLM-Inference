@@ -25,10 +25,32 @@ DynamoDB (state lock), ECR (image), CloudWatch (logs + alarms).
 
 ## IaC hygiene
 
-<!-- TODO (Phase 2): document the module layout, remote-state backend (S3 + DynamoDB lock),
-     tagging convention, and how `apply`/`destroy` makes chaos runs reproducible. -->
+Realized in Phase 3/4 Sub-stage E (ADR 0028). Full runbook: [`../terraform/README.md`](../terraform/README.md).
 
-_Filled in Phase 2._
+**Module layout** (`terraform/`):
+- `bootstrap/` — S3 state bucket + DynamoDB lock table on **local state** (it can't store the
+  backend that defines itself). Apply once.
+- `cluster/` — the VPC, security groups, IAM, ECR, S3 cold tier, CloudWatch, the 3-node etcd
+  quorum, and the Spot cache nodes — on the S3 **remote backend**. A flat root of small files
+  (`network/security/iam/ecr/s3/cloudwatch/etcd/cache.tf`), not nested modules (premature at this
+  size). user-data templates live in `cluster/userdata/`.
+
+**Remote state:** S3 backend (versioned, encrypted, private) + DynamoDB lock, supplied at
+`terraform init -backend-config=backend.hcl` (backends can't read variables). State and `*.tfvars`
+are gitignored; `*.example` files are committed.
+
+**Tagging:** provider `default_tags` stamps `project=kvcache, phase, owner, module` on everything,
+so spend is attributable and `destroy` is auditable.
+
+**Reproducible chaos:** `terraform destroy` + `apply` rebuilds a clean cluster between experiments —
+that reproducibility (not just "infra as code") is why chaos runs live behind Terraform. Cache
+nodes are discrete instances, not an ASG, so a chaos kill isn't auto-healed (ADR 0005/0028).
+
+**Key decisions:** static-IP etcd bootstrap (no discovery service); ECR image under
+systemd-managed Docker with SIGTERM→drain on stop (ADR 0023); IMDSv2 hop-limit 2 so the
+in-container Spot poller reaches metadata; least-privilege IAM scoped to the cold-bucket ARN, no
+static credentials (ADR 0004). Single public subnet, no NAT gateway (cost), SSH/metrics locked to
+the operator IP.
 
 ## Orchestration decision
 

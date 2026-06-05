@@ -7,21 +7,36 @@
 // the blocks up, Fetches the cached prefix run, and Writes the misses — then reports
 // throughput, block hit rate, latency percentiles, and the per-shard request distribution
 // (ADR 0014's hot-shard measurement). No GPU or vLLM needed (plan §1, §3).
+//
+// Phase 4 (chaos, ADR 0026) adds three things used by cmd/chaos:
+//   - -verify: a CORRECTNESS ORACLE. Each block's payload is a deterministic function of its
+//     hash, so a reader can regenerate the expected bytes and detect any corruption or
+//     mis-served block. The process exits non-zero if any violation is seen — that is the
+//     hard assertion the chaos run makes (ADR 0016: never serve KV mismatching the key).
+//   - -duration: run for a wall-clock window instead of a fixed request count, so the load
+//     spans a chaos run that is killing nodes underneath it.
+//   - -stats-every: periodic throughput/error/violation line, so the recovery dip after a
+//     node kill is visible in the terminal (and lines up with the Grafana panels).
 package main
 
 import (
 	"context"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
+	"os"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	kvcachev1 "github.com/haochentSC/distributed-kv-cache/gen/kvcache/v1"
 	"github.com/haochentSC/distributed-kv-cache/internal/blockhash"
@@ -45,15 +60,18 @@ func main() {
 	blockTokens := flag.Int("block-tokens", 16, "tokens per block")
 	prefixShare := flag.Float64("prefix-share", 0.8, "fraction of requests reusing the hot prefix")
 	concurrency := flag.Int("concurrency", 8, "concurrent clients")
-	requests := flag.Int("requests", 200, "requests per client")
+	requests := flag.Int("requests", 200, "requests per client (ignored when -duration > 0)")
+	duration := flag.Duration("duration", 0, "run for this wall-clock window instead of -requests (for chaos runs)")
+	statsEvery := flag.Duration("stats-every", 0, "if > 0, print a live throughput/violation line at this interval")
+	verify := flag.Bool("verify", false, "correctness oracle: payload=f(hash); verify every Fetch and exit non-zero on any mismatch (ADR 0016)")
 	prefixBlocks := flag.Int("prefix-blocks", 8, "blocks in the shared/hot prefix")
 	tailBlocks := flag.Int("tail-blocks", 2, "blocks in each request's divergent tail")
 	model := flag.String("model", "tinyllama-1.1b", "model id")
 	seed := flag.Int64("seed", 1, "RNG seed (logged for reproducibility)")
 	flag.Parse()
 
-	log.Printf("loadgen payload=%dB block=%dtok prefix-share=%.2f conc=%d req/cli=%d prefix=%dblk tail=%dblk seed=%d",
-		*payloadBytes, *blockTokens, *prefixShare, *concurrency, *requests, *prefixBlocks, *tailBlocks, *seed)
+	log.Printf("loadgen payload=%dB block=%dtok prefix-share=%.2f conc=%d req/cli=%d dur=%s verify=%v prefix=%dblk tail=%dblk seed=%d",
+		*payloadBytes, *blockTokens, *prefixShare, *concurrency, *requests, *duration, *verify, *prefixBlocks, *tailBlocks, *seed)
 
 	router := cluster.New(ringVnodes)
 	defer router.Close()
@@ -80,6 +98,13 @@ func main() {
 	// shard (the effect this run measures).
 	hotPrefix := randomTokens(rand.New(rand.NewSource(*seed)), *prefixBlocks**blockTokens)
 
+	// live is the lock-free counter set behind -stats-every; nil disables it so the hot path
+	// pays nothing when stats are off. Workers bump it with atomics; a ticker prints deltas.
+	var live *liveStats
+	if *statsEvery > 0 {
+		live = &liveStats{}
+	}
+
 	w := workload{
 		router:       router,
 		model:        *model,
@@ -89,6 +114,21 @@ func main() {
 		prefixBlocks: *prefixBlocks,
 		tailBlocks:   *tailBlocks,
 		hotPrefix:    hotPrefix,
+		verify:       *verify,
+		live:         live,
+	}
+
+	// Duration mode: every worker loops until a shared deadline rather than a fixed count, so
+	// the load spans the whole chaos window. requests is ignored in that case.
+	var deadline time.Time
+	if *duration > 0 {
+		deadline = time.Now().Add(*duration)
+	}
+
+	// Live stats ticker (optional). Stops when load finishes via the done channel.
+	done := make(chan struct{})
+	if live != nil {
+		go live.printLoop(*statsEvery, time.Now(), done)
 	}
 
 	results := make([]result, *concurrency)
@@ -99,11 +139,18 @@ func main() {
 		go func(id int) {
 			defer wg.Done()
 			// Per-worker RNG + per-worker result => no shared mutable state, no locks.
-			results[id] = w.run(rand.New(rand.NewSource(*seed+int64(id)+1)), *requests)
+			results[id] = w.run(rand.New(rand.NewSource(*seed+int64(id)+1)), *requests, deadline)
 		}(c)
 	}
 	wg.Wait()
-	report(results, time.Since(start))
+	close(done)
+	violations := report(results, time.Since(start))
+
+	// The chaos run keys off this exit code: a single mis-served byte fails the build.
+	if *verify && violations > 0 {
+		log.Printf("FAIL: %d correctness violation(s) — served KV mismatching the requested key (ADR 0016)", violations)
+		os.Exit(1)
+	}
 }
 
 // splitMembers parses a comma-separated address list, trimming blanks.
@@ -175,23 +222,33 @@ type workload struct {
 	prefixBlocks int
 	tailBlocks   int
 	hotPrefix    []int32
+	verify       bool       // correctness oracle on (payload=f(hash), check every Fetch)
+	live         *liveStats // nil unless -stats-every; lock-free live counters
 }
 
 type result struct {
-	requests  int
-	blocks    int            // total blocks looked up
-	hits      int            // blocks served from cache (Fetched)
-	writes    int            // blocks written on a miss
-	errors    int            // RPC errors mid-request (degrade-to-miss)
-	degraded  int            // requests with no reachable owner (routed to a miss)
-	perShard  map[string]int // requests routed to each shard (hot-shard measurement)
-	latencies []time.Duration
+	requests   int
+	blocks     int            // total blocks looked up
+	hits       int            // blocks served from cache (Fetched)
+	writes     int            // blocks written on a miss
+	errors     int            // RPC errors mid-request (degrade-to-miss)
+	degraded   int            // requests with no reachable owner (routed to a miss)
+	violations int            // Fetched bytes that did NOT match payload=f(hash) — must be 0 (ADR 0016)
+	perShard   map[string]int // requests routed to each shard (hot-shard measurement)
+	latencies  []time.Duration
 }
 
-func (w workload) run(rng *rand.Rand, n int) result {
+func (w workload) run(rng *rand.Rand, n int, deadline time.Time) result {
 	res := result{latencies: make([]time.Duration, 0, n), perShard: make(map[string]int)}
-	payload := make([]byte, w.payloadBytes) // reused per worker; contents irrelevant
-	for i := 0; i < n; i++ {
+	payload := make([]byte, w.payloadBytes) // reused per worker; contents irrelevant unless -verify
+	var expected []byte
+	if w.verify {
+		expected = make([]byte, w.payloadBytes) // scratch the Fetch result is compared against
+	}
+
+	// Either loop a fixed count (n) or until the shared deadline (duration mode). The deadline
+	// check is per-request — fine, since each request is many ms of RPC work.
+	for i := 0; deadline.IsZero() && i < n || !deadline.IsZero() && time.Now().Before(deadline); i++ {
 		blocks := blockhash.ChainBlocks(w.model, w.buildTokens(rng), w.blockTokens)
 		if len(blocks) == 0 {
 			continue
@@ -206,16 +263,25 @@ func (w workload) run(rng *rand.Rand, n int) result {
 		conns := w.router.OwnerConns(root, 2)
 		if len(conns) == 0 {
 			res.degraded++
+			if w.live != nil {
+				w.live.degraded.Add(1)
+			}
 			continue
 		}
 		res.perShard[owner]++
 
 		t0 := time.Now()
-		err := w.oneRequestWithFailover(context.Background(), conns, blocks, payload, root, &res)
+		err := w.oneRequestWithFailover(context.Background(), conns, blocks, payload, expected, root, &res)
 		res.latencies = append(res.latencies, time.Since(t0))
 		res.blocks += len(blocks)
+		if w.live != nil {
+			w.live.requests.Add(1)
+		}
 		if err != nil {
 			res.errors++ // every owner exhausted; treated as a degrade-to-miss
+			if w.live != nil {
+				w.live.errors.Add(1)
+			}
 		}
 	}
 	return res
@@ -241,7 +307,7 @@ func (w workload) buildTokens(rng *rand.Rand) []int32 {
 // elsewhere would corrupt placement (the dead primary will re-take ownership when it returns
 // and replication on the next write rebalances). If every owner errors we surface it as a
 // degrade-to-miss to the caller.
-func (w workload) oneRequestWithFailover(ctx context.Context, conns []*grpc.ClientConn, blocks []blockhash.Block, payload []byte, root []byte, res *result) error {
+func (w workload) oneRequestWithFailover(ctx context.Context, conns []*grpc.ClientConn, blocks []blockhash.Block, payload, expected []byte, root []byte, res *result) error {
 	var lastErr error
 	for i, conn := range conns {
 		client := kvcachev1.NewKVCacheClient(conn)
@@ -249,7 +315,7 @@ func (w workload) oneRequestWithFailover(ctx context.Context, conns []*grpc.Clie
 		// Lookup+Fetch; if blocks aren't present on the replica, the run is short and the
 		// remaining misses just won't be written this round — the next request to the new
 		// primary (after the dead one is removed from the ring) will handle the writes.
-		err := w.oneRequest(ctx, client, blocks, payload, res, i == 0, root)
+		err := w.oneRequest(ctx, client, blocks, payload, expected, res, i == 0, root)
 		if err == nil {
 			return nil
 		}
@@ -261,7 +327,7 @@ func (w workload) oneRequestWithFailover(ctx context.Context, conns []*grpc.Clie
 	return lastErr
 }
 
-func (w workload) oneRequest(ctx context.Context, client kvcachev1.KVCacheClient, blocks []blockhash.Block, payload []byte, res *result, allowWrites bool, root []byte) error {
+func (w workload) oneRequest(ctx context.Context, client kvcachev1.KVCacheClient, blocks []blockhash.Block, payload, expected []byte, res *result, allowWrites bool, root []byte) error {
 	bh := make([][]byte, len(blocks))
 	for i := range blocks {
 		bh[i] = blocks[i].Hash[:]
@@ -278,8 +344,16 @@ func (w workload) oneRequest(ctx context.Context, client kvcachev1.KVCacheClient
 	}
 
 	for i := 0; i < run; i++ { // reuse the cached prefix
-		if err := w.fetch(ctx, client, blocks[i]); err != nil {
+		hit, err := w.fetch(ctx, client, blocks[i], expected, res)
+		if err != nil {
 			return err
+		}
+		if !hit {
+			// Block vanished between Lookup and Fetch (evicted, or a failover changed the
+			// owner) — a MISS, not a violation. Stop reusing the prefix here; the remaining
+			// blocks fall through to the write path below.
+			run = i
+			break
 		}
 		res.hits++
 	}
@@ -297,23 +371,56 @@ func (w workload) oneRequest(ctx context.Context, client kvcachev1.KVCacheClient
 	return nil
 }
 
-func (w workload) fetch(ctx context.Context, client kvcachev1.KVCacheClient, b blockhash.Block) error {
+// fetch streams a block's bytes. It returns hit=false (not an error) on a NotFound — that is a
+// legitimate miss (eviction / failover), never a violation. When -verify is on it assembles the
+// bytes and compares them against payload=f(hash); a mismatch is the ADR 0016 violation we are
+// here to catch, and it is recorded but NOT treated as fatal mid-run (we count them all and the
+// process exits non-zero at the end).
+func (w workload) fetch(ctx context.Context, client kvcachev1.KVCacheClient, b blockhash.Block, expected []byte, res *result) (bool, error) {
 	stream, err := client.Fetch(ctx, &kvcachev1.FetchRequest{ModelId: w.model, BlockHash: b.Hash[:], TokenIds: b.TokenIDs})
 	if err != nil {
-		return err
+		if status.Code(err) == codes.NotFound {
+			return false, nil // miss, not a transport error
+		}
+		return false, err
 	}
+
+	var got []byte // assembled only when verifying; otherwise we just drain for transfer cost
 	for {
-		_, err := stream.Recv() // drain the chunks; we only care about transfer cost
+		chunk, err := stream.Recv()
 		if err == io.EOF {
-			return nil
+			break
 		}
 		if err != nil {
-			return err
+			if status.Code(err) == codes.NotFound {
+				return false, nil
+			}
+			return false, err
+		}
+		if w.verify {
+			got = append(got, chunk.GetData()...)
 		}
 	}
+
+	if w.verify {
+		fillVerifiable(expected, b.Hash) // regenerate what we SHOULD have stored for this hash
+		if len(got) != len(expected) || !equalBytes(got, expected) {
+			res.violations++
+			if w.live != nil {
+				w.live.violations.Add(1)
+			}
+			log.Printf("VIOLATION: block %x served %d bytes that do not match payload=f(hash)", b.Hash[:6], len(got))
+		}
+	}
+	return true, nil
 }
 
 func (w workload) write(ctx context.Context, client kvcachev1.KVCacheClient, b blockhash.Block, payload []byte, root []byte) error {
+	if w.verify {
+		// Stamp this block's content as a deterministic function of its hash, so any reader can
+		// regenerate and verify it. Cheap and overwrites the shared per-worker buffer in place.
+		fillVerifiable(payload, b.Hash)
+	}
 	stream, err := client.Write(ctx)
 	if err != nil {
 		return err
@@ -338,8 +445,77 @@ func (w workload) write(ctx context.Context, client kvcachev1.KVCacheClient, b b
 	return err
 }
 
-func report(results []result, elapsed time.Duration) {
-	var reqs, blocks, hits, writes, errs, degraded int
+// fillVerifiable writes a deterministic byte pattern derived from the block hash into buf, so a
+// reader that knows the hash can regenerate the exact bytes and detect corruption or a mis-served
+// block. It is NOT cryptographic — the point is only that block A's content can never equal block
+// B's, so "served the wrong block" and "served corrupt bytes" both surface as a byte mismatch.
+// An xorshift64* PRNG seeded from the hash fills 8 bytes per step (fast even at 2 MiB).
+func fillVerifiable(buf []byte, hash [32]byte) {
+	x := binary.LittleEndian.Uint64(hash[0:8]) ^ binary.LittleEndian.Uint64(hash[8:16]) ^
+		binary.LittleEndian.Uint64(hash[16:24]) ^ binary.LittleEndian.Uint64(hash[24:32])
+	if x == 0 {
+		x = 0x9e3779b97f4a7c15 // avoid the xorshift fixed point at 0
+	}
+	i := 0
+	for ; i+8 <= len(buf); i += 8 {
+		x ^= x >> 12
+		x ^= x << 25
+		x ^= x >> 27
+		binary.LittleEndian.PutUint64(buf[i:], x*0x2545F4914F6CDD1D)
+	}
+	for j := 0; i < len(buf); i, j = i+1, j+1 {
+		buf[i] = byte(x >> (uint(j%8) * 8)) // tail bytes
+	}
+}
+
+// equalBytes is bytes.Equal without the import; kept local to avoid pulling "bytes" in for one call.
+func equalBytes(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// liveStats are lock-free counters printed periodically under -stats-every so the recovery dip
+// after a node kill is visible in real time. Updated with atomics on the hot path (only when
+// enabled), read by printLoop.
+type liveStats struct {
+	requests   atomic.Int64
+	errors     atomic.Int64
+	degraded   atomic.Int64
+	violations atomic.Int64
+}
+
+// printLoop prints cumulative-and-delta counters every interval until done is closed. It runs in
+// its own goroutine; the atomics make the read race-free without locking the workers.
+func (s *liveStats) printLoop(interval time.Duration, start time.Time, done <-chan struct{}) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	var prevReq, prevErr int64
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+			req, errs, deg, vio := s.requests.Load(), s.errors.Load(), s.degraded.Load(), s.violations.Load()
+			dReq, dErr := req-prevReq, errs-prevErr
+			prevReq, prevErr = req, errs
+			rate := float64(dReq) / interval.Seconds()
+			fmt.Printf("[%5.1fs] %.0f req/s  reqs=%d errors=%d(+%d) degraded=%d violations=%d\n",
+				time.Since(start).Seconds(), rate, req, errs, dErr, deg, vio)
+		}
+	}
+}
+
+// report prints the final aggregate and returns the total correctness violations so main can set
+// the process exit code.
+func report(results []result, elapsed time.Duration) int {
+	var reqs, blocks, hits, writes, errs, degraded, violations int
 	var lats []time.Duration
 	perShard := map[string]int{}
 	for _, r := range results {
@@ -349,6 +525,7 @@ func report(results []result, elapsed time.Duration) {
 		writes += r.writes
 		errs += r.errors
 		degraded += r.degraded
+		violations += r.violations
 		lats = append(lats, r.latencies...)
 		for node, c := range r.perShard {
 			perShard[node] += c
@@ -365,6 +542,7 @@ func report(results []result, elapsed time.Duration) {
 	fmt.Printf("requests:            %d (%d errors, %d degraded-to-miss)\n", reqs, errs, degraded)
 	fmt.Printf("blocks:              %d  (hits %d / writes %d)\n", blocks, hits, writes)
 	fmt.Printf("block hit rate:      %.1f%%\n", hitRate)
+	fmt.Printf("correctness:         %d violations (must be 0; ADR 0016)\n", violations)
 	fmt.Printf("elapsed:             %s\n", elapsed.Round(time.Millisecond))
 	if s := elapsed.Seconds(); s > 0 {
 		fmt.Printf("throughput:          %.0f req/s\n", float64(reqs)/s)
@@ -374,6 +552,7 @@ func report(results []result, elapsed time.Duration) {
 		percentile(lats, 0.95).Round(time.Microsecond),
 		percentile(lats, 0.99).Round(time.Microsecond))
 	reportDistribution(perShard, reqs)
+	return violations
 }
 
 // reportDistribution prints requests-per-shard, sorted, with each shard's share. This is

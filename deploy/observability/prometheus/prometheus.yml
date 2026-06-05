@@ -6,9 +6,16 @@ global:
   evaluation_interval: 5s
 
 scrape_configs:
-  # One cache-server running on the host. For a multi-node local cluster, add each node's
-  # advertise host:metrics-port as another target here (or switch to file_sd/EC2 SD on AWS).
+  # Targets:
+  #   :9090         — a single standalone cache-server (the `go run ./cmd/cache-server` workflow).
+  #   :9100-:9102   — the chaos harness cluster (cmd/chaos defaults: -base-metrics-port 9100,
+  #                   nodes 0..2). When chaos KILLS a node its target goes DOWN here and its
+  #                   series stop in Grafana — that red target IS the failure, made visible.
+  # A DOWN target is expected whenever the matching node isn't running; it's not an error.
   - job_name: kvcache
     static_configs:
       - targets:
           - "host.docker.internal:9090"
+          - "host.docker.internal:9100"
+          - "host.docker.internal:9101"
+          - "host.docker.internal:9102"

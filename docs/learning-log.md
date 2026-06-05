@@ -18,6 +18,46 @@
 
 ## Phase 4 - Eviction, observability & chaos
 
+### 2026-06-05 - Chaos harness: an invariant isn't tested until a wrong byte fails the build
+**Phase:** 4 (chaos sub-stage)
+**What I was doing:** Stood up `cmd/chaos` — a harness that builds the binaries, launches a 3-node
+etcd-backed cluster, drives verifying load through it, and hard-kills random nodes on a schedule —
+then asserts zero correctness violations. Added a `-verify` correctness oracle to the load generator
+and chaos-cluster scrape targets to `prometheus.yml`. Captured in ADR 0026.
+**What I learned / what broke:**
+- **A correctness invariant is just prose until it's an executable assertion.** ADR 0016 says "never
+  serve KV that mismatches the requested key." The way to *test* that under chaos is to make each
+  block's payload a deterministic function of its hash (`payload = f(hash)`), then regenerate and
+  compare on every Fetch. Now a corrupt byte *or* a mis-served block both surface as a mismatch, the
+  process exits non-zero, and the chaos run becomes a CI gate. A throughput graph could never catch
+  this — it can't tell a correct miss from a silently-wrong hit.
+- **A miss is not a violation — that distinction is the whole design.** Under a kill, blocks vanish
+  (eviction, owner moved). The oracle treats `NotFound` as a legitimate miss and only a *byte
+  mismatch* as fatal. Conflating the two would make every failover look like corruption.
+- **`go run` can't be chaos-killed; build the binary.** `go run` spawns a compiler+child, so
+  `Process.Kill` hits the wrapper and orphans the real server — the lease never lapses and there's
+  nothing to fail over. Building once and exec'ing the binary is what makes the kill a real crash.
+- **SIGKILL ≠ SIGTERM here, on purpose.** A hard kill is the *unplanned* loss the lease TTL exists
+  for; SIGTERM would trigger the graceful drain (ADR 0023), which deregisters first — a different
+  story. The crash path exercises lease-expiry → ring-removal → read-failover with zero cooperation.
+- **Recovery is bounded by the lease TTL, and you can watch it.** With a 5s lease, the per-2s `req/s`
+  line dips after a kill and climbs back within ~the TTL; a killed node's `:910x` Prometheus target
+  goes DOWN and its series stop — the failure made visible. Live result: 3 kills / 2 restarts, 4815
+  requests, **0 violations, 0 errors, 0 degraded** — failover was seamless enough the client never
+  even degraded to a miss.
+- **The replicator log floods under a kill.** When the dead node was someone's replica, the primary
+  logs one "connection refused" per block until the ring drops it. Harmless (the primary already
+  acked; a lost replica update is a future miss), but loud enough to bury a real VIOLATION line — a
+  follow-up should dedupe that log.
+**Why it matters / what I'd redo:** The transferable idea is the **oracle**: design the workload so
+the invariant you care about is *checkable from the data itself*, not inferred from metrics. That's
+how you chaos-test correctness rather than just availability. Next: one WSL2 `-race` pass over the
+fault loop + oracle, and partition/latency faults when the cluster moves to Linux/EC2 (Sub-stage E).
+**Links:** ADR 0026; `cmd/chaos/main.go`, `cmd/loadgen/main.go` (`-verify`/`fillVerifiable`),
+`cmd/loadgen/main_test.go`, `deploy/observability/prometheus/prometheus.yml`.
+
+---
+
 ### 2026-06-04 - Grafana dashboards: PromQL is where raw counters become a story
 **Phase:** 4 (Sub-stage F)
 **What I was doing:** Built a local-first observability stack under `deploy/observability/` — a

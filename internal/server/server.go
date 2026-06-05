@@ -24,6 +24,15 @@ type replicaEnqueuer interface {
 	Enqueue(job ReplicaJob)
 }
 
+// coldReader is the read-through seam to the cold tier (ADR 0027): on a hot miss, Fetch asks it
+// for the block. It is a narrow interface (not coldtier.Tier) so this package — and its tests —
+// stay free of the AWS SDK; main injects an adapter over coldtier.Tier. nil disables read-through.
+// A storage error or a miss both mean "not here" (the caller serves NotFound); the tier can never
+// return a wrong block because it is keyed by (model, block_hash) (ADR 0016).
+type coldReader interface {
+	Get(ctx context.Context, model string, h cache.BlockHash) (kv []byte, version uint64, tokenIDs []int32, ok bool, err error)
+}
+
 // metricsSink receives operational counters from the gRPC handlers. It is a narrow interface
 // (not a concrete *metrics.Metrics) so this package stays decoupled from Prometheus and tests
 // can pass a fake; *metrics.Metrics satisfies it (ADR 0025). The replicator uses the Replica
@@ -52,6 +61,7 @@ type Server struct {
 	store   *cache.Store
 	repl    replicaEnqueuer // nil on a single node (no replication); set in Phase 3 Sub-stage B
 	metrics metricsSink     // never nil; noopMetrics until WithMetrics is called
+	cold    coldReader      // nil = no cold tier; set by WithColdReader (ADR 0027)
 }
 
 // New wires a Server to a Store with NO replication (single-node / tests).
@@ -68,6 +78,15 @@ func NewWithReplicator(store *cache.Store, repl replicaEnqueuer) *Server {
 func (s *Server) WithMetrics(m metricsSink) *Server {
 	if m != nil {
 		s.metrics = m
+	}
+	return s
+}
+
+// WithColdReader enables Fetch read-through to a cold tier (ADR 0027) and returns the Server for
+// chaining. A nil c leaves read-through disabled (the default).
+func (s *Server) WithColdReader(c coldReader) *Server {
+	if c != nil {
+		s.cold = c
 	}
 	return s
 }
@@ -119,6 +138,11 @@ func (s *Server) Fetch(req *kvcachev1.FetchRequest, stream kvcachev1.KVCache_Fet
 	}
 	e, hit := s.store.Get(req.GetModelId(), h)
 	if !hit {
+		// Hot miss — read through to the cold tier before giving up (ADR 0027). A cold hit is
+		// streamed (and re-admitted); a cold miss falls through to NotFound below.
+		if served, err := s.fetchFromCold(stream, req, h); err != nil || served {
+			return err
+		}
 		s.metrics.Miss("fetch")
 		return status.Error(codes.NotFound, "block not cached")
 	}
@@ -130,7 +154,46 @@ func (s *Server) Fetch(req *kvcachev1.FetchRequest, stream kvcachev1.KVCache_Fet
 		return status.Error(codes.NotFound, "token_ids do not match cached block")
 	}
 
-	data := e.KV // immutable snapshot — safe to stream without holding a lock
+	return streamKV(stream, e.KV) // e.KV is an immutable snapshot — safe to stream lock-free
+}
+
+// fetchFromCold serves a hot miss from the cold tier (ADR 0027). It returns served=true ONLY when
+// it streamed matching bytes; a cold miss, a storage error, or a version/token mismatch all return
+// served=false so Fetch emits NotFound (upholding ADR 0016 — we never stream non-matching bytes).
+// On a cold hit it re-admits the block to the hot store so repeat fetches stay fast.
+func (s *Server) fetchFromCold(stream kvcachev1.KVCache_FetchServer, req *kvcachev1.FetchRequest, h cache.BlockHash) (bool, error) {
+	if s.cold == nil {
+		return false, nil
+	}
+	model := req.GetModelId()
+	kv, version, tokenIDs, ok, err := s.cold.Get(stream.Context(), model, h)
+	if err != nil || !ok {
+		// A storage error is logged by the tier and treated as a miss here — degrade to a
+		// recompute, never to wrong bytes (ADR 0013/0016).
+		return false, nil
+	}
+	// Apply the SAME guards as the hot path: a pinned version or supplied token_ids must match,
+	// or this is not a usable hit (ADR 0016).
+	if v := req.GetVersion(); v != 0 && v != version {
+		return false, nil
+	}
+	if toks := req.GetTokenIds(); len(toks) > 0 && !slices.Equal(toks, tokenIDs) {
+		return false, nil
+	}
+	// Re-admit to the hot store so repeat fetches don't pay the cold round-trip — but skip it if
+	// that would breach the hard ceiling, since the evictor would just spill it straight back
+	// (admit→evict→spill thrash). Re-admit at the ORIGINAL version (PutWithVersion) so a copy held
+	// by a replica still agrees on the version. Best-effort; a skipped re-admit is harmless.
+	if !s.store.OverHardLimit(int64(len(kv))) {
+		s.store.PutWithVersion(h, &cache.Entry{ModelID: model, KV: kv, TokenIDs: tokenIDs}, version)
+	}
+	s.metrics.Hit("fetch_cold")
+	return true, streamKV(stream, kv)
+}
+
+// streamKV server-streams data in bounded chunks, terminating with Last=true (one empty frame for
+// an empty payload). Shared by the hot and cold-tier Fetch paths.
+func streamKV(stream kvcachev1.KVCache_FetchServer, data []byte) error {
 	for off := 0; off < len(data); off += fetchChunkBytes {
 		end := off + fetchChunkBytes
 		if end > len(data) {

@@ -20,11 +20,20 @@ import (
 	kvcachev1 "github.com/haochentSC/distributed-kv-cache/gen/kvcache/v1"
 	"github.com/haochentSC/distributed-kv-cache/internal/cache"
 	"github.com/haochentSC/distributed-kv-cache/internal/cluster"
+	"github.com/haochentSC/distributed-kv-cache/internal/coldtier"
 	"github.com/haochentSC/distributed-kv-cache/internal/coord"
 	"github.com/haochentSC/distributed-kv-cache/internal/metrics"
 	"github.com/haochentSC/distributed-kv-cache/internal/server"
 	"github.com/haochentSC/distributed-kv-cache/internal/spot"
 )
+
+// coldAdapter bridges coldtier.Tier (keyed by [32]byte) to the server's coldReader seam (keyed by
+// cache.BlockHash), so the server package stays free of both the coldtier and AWS-SDK imports.
+type coldAdapter struct{ t coldtier.Tier }
+
+func (a coldAdapter) Get(ctx context.Context, model string, h cache.BlockHash) ([]byte, uint64, []int32, bool, error) {
+	return a.t.Get(ctx, model, [32]byte(h))
+}
 
 // ringVnodes must match the value every client (loadgen) and peer server uses, or they'd
 // compute different rings and disagree on placement. 128 is the calibrated value (ADR 0014).
@@ -44,6 +53,7 @@ func main() {
 	ttl := flag.Duration("ttl", 0, "idle TTL: evict blocks not read within this window; 0 disables the TTL sweep")
 	evictSweep := flag.Duration("evict-sweep", 30*time.Second, "how often the TTL sweep runs")
 	metricsAddr := flag.String("metrics-addr", ":9090", "address for the Prometheus /metrics endpoint; empty disables it")
+	coldBucket := flag.String("cold-bucket", "", "S3 bucket for the cold tier (spill-on-evict + Fetch read-through, ADR 0027); empty = disabled. Region/creds come from the instance role / AWS_REGION")
 	flag.Parse()
 
 	// Surface watermark misconfiguration loudly: the Store would otherwise silently clamp a bad
@@ -63,23 +73,47 @@ func main() {
 		id = adv // the address doubles as the ring label, matching the static driver's convention
 	}
 
+	// ctx bounds the cold-tier workers + membership watch + replicator + evictor + metrics-poller.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Optional S3 cold tier (ADR 0027): entries evicted under pressure/TTL spill to S3, and a hot
+	// miss reads through to it. Empty -cold-bucket keeps the node cloud-free — the default for all
+	// local/chaos runs. Region + credentials come from the instance role / AWS_REGION (no static
+	// creds, ADR 0004).
+	var cold coldtier.Tier
+	if *coldBucket != "" {
+		t, err := coldtier.NewS3(ctx, *coldBucket)
+		if err != nil {
+			log.Fatalf("cold tier: %v", err)
+		}
+		cold = t
+		defer cold.Close()
+		log.Printf("cold tier enabled: s3://%s (spill-on-evict + Fetch read-through)", *coldBucket)
+	}
+
 	// Phase 4: an LRU-backed, optionally bounded Store. With -max-bytes unset it stays
 	// unbounded (NoopPolicy-equivalent behaviour). The LRU is the baseline policy Phase 5's
-	// cost-aware/fairness engine will be measured against — swapped here, nowhere else.
-	store := cache.NewStore(cache.NewLRU(),
+	// cost-aware/fairness engine will be measured against — swapped here, nowhere else. When a
+	// cold tier is configured, entries evicted under pressure/TTL are demoted to it (ADR 0027)
+	// instead of being lost; the SpillFunc just adapts cache.BlockHash to the tier's [32]byte.
+	storeOpts := []cache.StoreOption{
 		cache.WithMaxBytes(*maxBytes),
 		cache.WithWatermarks(*hiWater, *loWater),
-	)
+	}
+	if cold != nil {
+		storeOpts = append(storeOpts, cache.WithSpiller(
+			func(model string, h cache.BlockHash, version uint64, tokenIDs []int32, kv []byte) {
+				cold.Spill(model, [32]byte(h), version, tokenIDs, kv)
+			}))
+	}
+	store := cache.NewStore(cache.NewLRU(), storeOpts...)
 
 	// Process-wide Prometheus instrumentation (ADR 0025). One *Metrics owns a private registry;
 	// it feeds the gRPC interceptors, the evictor's reason counter, the server/replicator event
 	// counters, and the polled resident/queue gauges below. Cheap to build even when -metrics-addr
 	// is empty (the collectors just never get scraped).
 	m := metrics.New()
-
-	// ctx bounds the membership watch + replicator + evictor + metrics-poller goroutines.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// The background evictor handles memory pressure (watermark drain) and TTL expiry. It is a
 	// no-op until -max-bytes/-ttl are set, so it's always safe to start. m.Eviction counts what
@@ -128,6 +162,9 @@ func main() {
 		srv = server.New(store)
 	}
 	srv.WithMetrics(m)
+	if cold != nil {
+		srv.WithColdReader(coldAdapter{cold}) // read-through on a hot miss (ADR 0027)
+	}
 
 	// Chain the metrics interceptors so EVERY RPC's latency + per-code count is recorded in one
 	// place, no per-handler bookkeeping (ADR 0025). Unary covers Lookup/Evict/Health; stream

@@ -18,6 +18,43 @@
 
 ## Phase 4 - Eviction, observability & chaos
 
+### 2026-06-05 - S3 cold tier: keeping the cloud out of a cloud-free core
+**Phase:** 4 (AWS Sub-stage E — the cold tier, ahead of the Terraform)
+**What I was doing:** Built spill-on-evict + Fetch read-through to an S3 cold tier
+(`internal/coldtier`), the one real code change for the AWS deployment. Captured in ADR 0027.
+**What I learned / what broke:**
+- **One eviction chokepoint = one hook.** Both memory-pressure eviction and the TTL sweep funnel
+  through `Store.evict`, so a single `SpillFunc` call there demotes exactly the right blocks — and
+  because the explicit `Evict` RPC goes through `Delete` (a *different* method), a client deletion
+  correctly does NOT resurrect from cold. Finding the one place all the paths converge beat
+  sprinkling hooks across `evictOne`/`sweepIdle`.
+- **"Cloud-free core" is a dependency-graph property, enforced by seams.** The trick is that
+  `cache` exposes a plain `func` callback and `server` a tiny `coldReader` interface — *they define
+  the seam, the leaf `coldtier` package implements it* — so neither imports the AWS SDK and both
+  still `go test` without it. Same shape as how replication and metrics were already decoupled.
+  Importing the SDK into a widely-used package would have forced it into every test binary.
+- **Async under a lock means "enqueue and return," nothing more.** Spill is called while a stripe
+  lock is held, so it must not do S3 I/O (hundreds of ms) there. It pushes to a bounded worker pool
+  and *drops* on a full queue — best-effort, because a lost spill is a recompute, not a violation
+  (ADR 0013). The expensive part (framing the multi-MB blob, the PutObject) happens in the worker.
+- **The correctness invariant has to survive the tier boundary.** Storing only KV bytes in S3 would
+  force read-through to serve unverified bytes — an ADR 0016 hole. So the cold object is
+  self-describing (`version + token_ids + kv`), and read-through re-applies the *same* version/token
+  guards the hot path does. A cold hit can only return bytes stored under that exact
+  `(model, block_hash)`; a mismatch is a miss.
+- **Re-admit can thrash.** Re-admitting a cold hit to RAM keeps repeats fast, but under a working
+  set larger than RAM it loops admit→evict→spill→re-upload. Skipping re-admit when it would breach
+  the hard ceiling bounds the churn — a reminder that tiering's win depends on the hot tier being
+  big enough for the *hot* set.
+**Why it matters / what I'd redo:** The transferable idea is decoupling an optional cloud dependency
+behind a seam the core owns, so the core stays testable offline. Next: a WSL2 `-race` pass over the
+spill pool + re-admit, an S3 lifecycle rule so cold objects expire, and the live cluster verify
+(force eviction → objects in the bucket → recovered cold hit, zero violations).
+**Links:** ADR 0027; `internal/coldtier/{coldtier,s3}.go`, `internal/cache/store.go` (SpillFunc),
+`internal/server/server.go` (read-through), `cmd/cache-server/main.go` (`-cold-bucket`).
+
+---
+
 ### 2026-06-05 - Chaos harness: an invariant isn't tested until a wrong byte fails the build
 **Phase:** 4 (chaos sub-stage)
 **What I was doing:** Stood up `cmd/chaos` — a harness that builds the binaries, launches a 3-node

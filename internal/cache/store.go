@@ -35,7 +35,18 @@ type Store struct {
 	// now is the clock seam. It defaults to time.Now; tests override it so the TTL sweep and
 	// access-time bookkeeping are deterministic without time.Sleep (per .claude/rules/go-testing).
 	now func() time.Time
+
+	// spill, if set, demotes an entry to a lower storage tier just before it is dropped from RAM
+	// (cold-tier spill-on-evict, ADR 0027). nil = no tier (the default; keeps the core cloud-free
+	// — the S3 wiring lives in package coldtier and is injected from main). See SpillFunc.
+	spill SpillFunc
 }
+
+// SpillFunc demotes an evicted entry to a lower tier (the cold tier, ADR 0027). It is called from
+// the eviction path WHILE A STRIPE LOCK IS HELD, so it MUST NOT block — implementations enqueue
+// and return. It is best-effort: a dropped spill is just a future recompute (ADR 0013), never a
+// correctness violation. The kv/tokenIDs passed are immutable Entry snapshots, safe to retain.
+type SpillFunc func(model string, hash BlockHash, version uint64, tokenIDs []int32, kv []byte)
 
 type stripe struct {
 	mu sync.RWMutex
@@ -68,6 +79,13 @@ func WithMaxBytes(n int64) StoreOption {
 // 0 < lo < hi <= 1. The absolute thresholds are computed in NewStore once maxBytes is known.
 func WithWatermarks(hi, lo float64) StoreOption {
 	return func(s *Store) { s.hiFrac, s.loFrac = hi, lo }
+}
+
+// WithSpiller installs a SpillFunc so entries evicted under memory pressure or the TTL sweep are
+// demoted to a lower tier instead of being lost (ADR 0027). With no spiller (the default) an
+// evicted entry is simply dropped, exactly as before — so local/test runs are unaffected.
+func WithSpiller(fn SpillFunc) StoreOption {
+	return func(s *Store) { s.spill = fn }
 }
 
 // NewStore builds a Store, defaulting to NoopPolicy when policy is nil. Options are applied
@@ -333,6 +351,15 @@ func (s *Store) evict(h BlockHash) int64 {
 	e, ok := st.m[h]
 	if !ok {
 		return 0 // a concurrent Delete already removed it; nothing freed
+	}
+	if s.spill != nil {
+		// Demote to the cold tier BEFORE dropping from RAM (ADR 0027). spill is non-blocking by
+		// contract (it enqueues), so it's safe to call under the stripe lock — same as the
+		// RecordEvict call below. This is the ONLY eviction path that spills: it carries both
+		// memory-pressure victims (evictOne) and TTL-swept idle entries (sweepIdle). The explicit
+		// Evict RPC goes through Delete, which does NOT spill — a client deleting a block means
+		// "remove it", not "move it to cold".
+		s.spill(e.ModelID, h, e.Version, e.TokenIDs, e.KV)
 	}
 	delete(st.m, h)
 	s.totalBytes.Add(-e.SizeBytes)

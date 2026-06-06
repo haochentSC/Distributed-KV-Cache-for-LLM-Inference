@@ -1,7 +1,7 @@
 # ADR 0028 — AWS cluster topology + Terraform module layout
 
-- **Status:** accepted (authored; pending first `apply`)
-- **Date:** 2026-06-05 (Phase 3/4 Sub-stage E)
+- **Status:** accepted (first `apply` succeeded 2026-06-06; cluster verified live)
+- **Date:** 2026-06-05 (Phase 3/4 Sub-stage E); first apply + verify 2026-06-06
 - **Deciders:** HC (+ Claude)
 
 ## Context
@@ -71,8 +71,34 @@ ever written.
   (rebuild a clean cluster between experiments).
 - **loadgen must run inside the VPC** (cache nodes advertise private IPs): copy a Linux build to a
   cache node, or use a bastion. Documented in `terraform/README.md`.
-- Not yet validated against a live account — `terraform fmt -check`/`validate` run as the first
-  Stage-2 step once the toolchain is installed (Stage 0). The HCL is authored but unapplied; this
-  ADR is "accepted (pending first apply)" and flips to plain "accepted" once the cluster stands up.
 - CloudWatch **alarms** (vs just log groups) and the AWS-native **chaos scripts** (`tc`/`iptables`,
   instance-kill) are Stage 6, layered on this base.
+
+## First-apply findings (2026-06-06)
+
+The cluster stood up and was verified live (etcd 3-node quorum with an elected leader; all 3 Spot
+cache nodes registered under `/kvcache/members/`; a `loadgen -verify` run inside the VPC reported
+**0 correctness violations** over 6.6k requests and reproduced the ADR 0014 ~87% hot-shard
+concentration at prefix-share 0.8). Three fixes were needed along the way:
+
+- **`fmt`/`validate` cleanups.** `s3.tf` needed `terraform fmt`; `cache.sh.tftpl` had a literal
+  `${...}` inside a comment that `templatefile()` tried to parse as an interpolation (it parses the
+  whole file, comments included) — reworded.
+- **First-boot image race (real bug, not bad luck).** In this deploy model the image push *always*
+  follows the cluster `apply` (the ECR repo must exist first), so a fresh cache node boots before
+  the image exists. The old user-data ran `docker pull` under `set -euo pipefail`, so the missing
+  image **aborted user-data before the systemd unit was even written** — the node then couldn't
+  self-heal. Fix: the boot-time pull is now non-fatal; `cache-server.service` (`Restart=always`)
+  retries the pull via `docker run` until the image lands. Added `user_data_replace_on_change =
+  true` so template fixes actually recreate the node on apply.
+- **`t3.small` CPU-credit exhaustion (sizing).** `t3.*` are burstable (~0.2 vCPU baseline). A load
+  test driven *on* a cache node depleted the credit balance to 0; AWS then throttled the box to
+  baseline, which starved the 10s etcd lease keepalive and dropped every node from the ring (empty
+  `/kvcache/members/`) and even blocked `sshd`. Mitigated by switching cache nodes to
+  `credit_specification { cpu_credits = "unlimited" }` (in the Terraform now). For sustained
+  benchmark/chaos load a **non-burstable** type (e.g. `c7i.large`) is the better substrate; also
+  drive `loadgen` from an etcd node or a bastion, not from a shard. `t3.small`'s 2 GiB RAM is also
+  tight against the 1.5 GB `cache_max_bytes` default — size up for real benchmarks.
+- **To verify:** whether a cache-server re-registers on its own after an etcd lease *lapse* (here
+  recovery took an instance reboot, but that was confounded by the credit throttle — isolate under
+  Sub-stage C failover testing).

@@ -1,6 +1,6 @@
 # Cold-tier bucket (ADR 0027): cache nodes spill evicted blocks here and read them back through.
 resource "aws_s3_bucket" "cold" {
-  bucket       = local.cold_bucket
+  bucket        = local.cold_bucket
   force_destroy = true # cold data is disposable (a miss just recomputes), so allow clean teardown
   tags          = { Name = "kvcache-cold" }
 }

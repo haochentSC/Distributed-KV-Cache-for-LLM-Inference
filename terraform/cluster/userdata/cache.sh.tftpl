@@ -2,15 +2,20 @@
 # Cache node bootstrap (Amazon Linux 2023): install Docker, pull the cache image from ECR, and run
 # it under systemd via a small wrapper that resolves this instance's id + private IP at start time.
 # Templated: region, ecr_registry, ecr_image, etcd_endpoints, cold_bucket, max_bytes, rf, lease_ttl,
-# log_group. templatefile substitutes ${...}; $${...} reaches the files as a literal $... .
+# log_group. Terraform fills the templated values above; shell variables are escaped with a doubled
+# dollar sign so they survive templating and reach the rendered script literally.
 set -euxo pipefail
 
 dnf install -y docker
 systemctl enable --now docker
 
-# Authenticate to ECR and pull the image (creds from the instance role — no static keys).
+# Authenticate to ECR and pre-pull the image (creds from the instance role — no static keys).
+# Non-fatal pull: first boot can race the image push (the ECR repo must exist before the image can
+# be pushed), so a missing image must NOT abort user-data — otherwise the unit below never gets
+# written and the node can't self-heal. cache-server.service (Restart=always) retries the pull via
+# `docker run` until the image lands.
 aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${ecr_registry}
-docker pull ${ecr_image}
+docker pull ${ecr_image} || echo "image not present yet; cache-server.service will retry the pull"
 
 # Runtime wrapper: a single-quoted heredoc so the $${...} shell vars stay literal and expand when
 # the SERVICE starts (IMDSv2 for the instance id + private advertise IP).

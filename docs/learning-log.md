@@ -18,6 +18,35 @@
 
 ## Phase 4 - Eviction, observability & chaos
 
+### 2026-06-06 - Real workloads: replaying ShareGPT instead of synthetic traffic
+**Phase:** 4 (making the benchmark practical, not theoretical)
+**What I was doing:** Added a `-trace` mode to `loadgen` that replays a real multi-turn chat
+dataset (ShareGPT, the same one vLLM's `benchmark_serving.py` uses) instead of the synthetic
+hot-prefix model. An offline Python step (`scripts/prep_sharegpt.py`) tokenizes the
+conversations; `loadgen` replays the token IDs through the existing Lookup/Fetch/Write path.
+**What I learned / what broke:**
+- **For a cache, the access pattern IS the real data — payload bytes are not.** Hit rate,
+  eviction, and load balance depend only on *which blocks are requested and when*, so a real
+  trace makes the numbers real with zero GPU/model needed. Real KV tensors only matter for the
+  separate Phase 4.5 TTFT benchmark.
+- **Real prefix reuse comes from multi-turn conversations, not a knob.** Turn N+1 re-sends turns
+  1..N as its prefix, so those blocks are already cached. Verified in the trace: a conversation's
+  turns 0/1/2 share an identical token head. First real run: **31.9% block hit rate, 0
+  correctness violations** on 6.5k requests.
+- **Tokenization belongs offline, in Python, with a real tokenizer.** Go has no good HF tokenizer;
+  splitting tokenize (Python, tiktoken `cl100k_base`) from replay (Go) keeps block lengths
+  realistic while the Go side still does the real chained block-hashing (ADR 0010). Same
+  separation-of-concerns seam idea as the cold tier.
+- **Hit rate is a function of cache size vs working set.** With `-max-bytes` below the working
+  set the evictor drops blocks before reuse; raising it lifts the hit rate. Sweeping `-max-bytes`
+  and plotting the curve is the portfolio artifact, not a single number.
+- **Windows gotcha:** PowerShell *drops* an empty-string arg (`-metrics-addr ""`) passed to a
+  native exe, so Go's flag parser grabbed the next token. Use a real port or the `-flag=` form.
+**Why it matters / what I'd redo:** Moves the project from "synthetic load proves it works" to
+"real workload, real reuse, still correct." Next: replay this against the AWS cluster under
+`aws-chaos.sh` and capture Grafana panels.
+**Links:** `scripts/prep_sharegpt.py`, `cmd/loadgen/trace.go`, `cmd/loadgen/main.go`
+
 ### 2026-06-05 - S3 cold tier: keeping the cloud out of a cloud-free core
 **Phase:** 4 (AWS Sub-stage E — the cold tier, ahead of the Terraform)
 **What I was doing:** Built spill-on-evict + Fetch read-through to an S3 cold tier

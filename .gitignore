@@ -1,16 +1,27 @@
+# NOTE: .gitignore does NOT support inline (trailing) comments — text after a pattern on the
+# same line becomes part of the pattern. Keep every comment on its own line.
+
 # Go
 /bin/
 *.exe
 *.test
 *.out
 coverage.*
+# stray binary from `go build -o loadgen ./cmd/loadgen`
+/loadgen
+
+# Real-workload data (large; regenerate with scripts/prep_sharegpt.py — never commit)
+sharegpt.json
+*.jsonl
 
 # Terraform
 **/.terraform/*
 *.tfstate
 *.tfstate.*
-*.tfvars        # may contain secrets; commit *.tfvars.example instead
-backend.hcl     # env-specific backend config; commit backend.hcl.example instead
+# *.tfvars may contain secrets; commit *.tfvars.example instead
+*.tfvars
+# env-specific backend config; commit backend.hcl.example instead
+backend.hcl
 crash.log
 
 # Python (vLLM connector)

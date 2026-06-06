@@ -68,6 +68,7 @@ func main() {
 	tailBlocks := flag.Int("tail-blocks", 2, "blocks in each request's divergent tail")
 	model := flag.String("model", "tinyllama-1.1b", "model id")
 	seed := flag.Int64("seed", 1, "RNG seed (logged for reproducibility)")
+	trace := flag.String("trace", "", "replay a real-workload trace (JSONL from scripts/prep_sharegpt.py) instead of synthetic traffic; ignores prefix/tail flags")
 	flag.Parse()
 
 	log.Printf("loadgen payload=%dB block=%dtok prefix-share=%.2f conc=%d req/cli=%d dur=%s verify=%v prefix=%dblk tail=%dblk seed=%d",
@@ -116,6 +117,23 @@ func main() {
 		hotPrefix:    hotPrefix,
 		verify:       *verify,
 		live:         live,
+	}
+
+	// Trace mode: replay a real multi-turn workload (ShareGPT etc.) instead of synthesizing.
+	// All workers share one trace slice and one atomic cursor, so each request is handed out
+	// once (count mode) or wrapped around (duration mode). The synthetic prefix/tail flags are
+	// ignored — reuse now comes from the conversations themselves.
+	if *trace != "" {
+		recs, err := loadTrace(*trace)
+		if err != nil {
+			log.Fatalf("load trace: %v", err)
+		}
+		if len(recs) == 0 {
+			log.Fatalf("trace %s has no usable requests", *trace)
+		}
+		log.Printf("loadgen trace=%s requests=%d (synthetic prefix/tail flags ignored)", *trace, len(recs))
+		w.trace = recs
+		w.traceCursor = new(atomic.Int64)
 	}
 
 	// Duration mode: every worker loops until a shared deadline rather than a fixed count, so
@@ -224,6 +242,12 @@ type workload struct {
 	hotPrefix    []int32
 	verify       bool       // correctness oracle on (payload=f(hash), check every Fetch)
 	live         *liveStats // nil unless -stats-every; lock-free live counters
+
+	// Trace mode (set only with -trace): a shared, read-only slice of pre-tokenized requests
+	// and a shared atomic cursor so workers consume it exactly once (or wrap in duration mode).
+	// nil trace => synthetic mode (buildTokens).
+	trace       []traceRecord
+	traceCursor *atomic.Int64
 }
 
 type result struct {
@@ -246,10 +270,23 @@ func (w workload) run(rng *rand.Rand, n int, deadline time.Time) result {
 		expected = make([]byte, w.payloadBytes) // scratch the Fetch result is compared against
 	}
 
-	// Either loop a fixed count (n) or until the shared deadline (duration mode). The deadline
-	// check is per-request — fine, since each request is many ms of RPC work.
-	for i := 0; deadline.IsZero() && i < n || !deadline.IsZero() && time.Now().Before(deadline); i++ {
-		blocks := blockhash.ChainBlocks(w.model, w.buildTokens(rng), w.blockTokens)
+	// Termination: duration mode runs until the shared deadline; otherwise synthetic mode does
+	// n requests per worker, and trace mode runs until the shared trace is consumed (signaled by
+	// nextTokens returning ok=false). The deadline check is per-request — fine, since each
+	// request is many ms of RPC work.
+	for i := 0; ; i++ {
+		if !deadline.IsZero() {
+			if !time.Now().Before(deadline) {
+				break
+			}
+		} else if w.trace == nil && i >= n {
+			break
+		}
+		tokens, ok := w.nextTokens(rng, deadline)
+		if !ok {
+			break // trace exhausted (count mode)
+		}
+		blocks := blockhash.ChainBlocks(w.model, tokens, w.blockTokens)
 		if len(blocks) == 0 {
 			continue
 		}
@@ -285,6 +322,25 @@ func (w workload) run(rng *rand.Rand, n int, deadline time.Time) result {
 		}
 	}
 	return res
+}
+
+// nextTokens returns the next request's token sequence and ok=false when there is no more
+// work. In synthetic mode it just builds a fresh sequence. In trace mode it hands out the
+// shared trace via an atomic cursor: count mode (no deadline) stops once the trace is
+// consumed; duration mode wraps around so the load can span a chaos window.
+func (w workload) nextTokens(rng *rand.Rand, deadline time.Time) ([]int32, bool) {
+	if w.trace == nil {
+		return w.buildTokens(rng), true
+	}
+	n := int64(len(w.trace))
+	idx := w.traceCursor.Add(1) - 1
+	if deadline.IsZero() {
+		if idx >= n {
+			return nil, false
+		}
+		return w.trace[idx].Tokens, true
+	}
+	return w.trace[idx%n].Tokens, true
 }
 
 // buildTokens produces a request's token sequence: a prefix (the hot one with

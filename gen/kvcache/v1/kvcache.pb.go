@@ -297,6 +297,192 @@ func (x *KVChunk) GetLast() bool {
 	return false
 }
 
+type BatchFetchRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ModelId       string                 `protobuf:"bytes,1,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"` // one model for the whole batch
+	Blocks        []*FetchBlock          `protobuf:"bytes,2,rep,name=blocks,proto3" json:"blocks,omitempty"`                  // in load order; a block's index is its position here
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchFetchRequest) Reset() {
+	*x = BatchFetchRequest{}
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchFetchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchFetchRequest) ProtoMessage() {}
+
+func (x *BatchFetchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchFetchRequest.ProtoReflect.Descriptor instead.
+func (*BatchFetchRequest) Descriptor() ([]byte, []int) {
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *BatchFetchRequest) GetModelId() string {
+	if x != nil {
+		return x.ModelId
+	}
+	return ""
+}
+
+func (x *BatchFetchRequest) GetBlocks() []*FetchBlock {
+	if x != nil {
+		return x.Blocks
+	}
+	return nil
+}
+
+// FetchBlock is one block's lookup key inside a BatchFetchRequest — the same fields a
+// single FetchRequest carries, minus model_id (shared by the batch).
+type FetchBlock struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BlockHash     []byte                 `protobuf:"bytes,1,opt,name=block_hash,json=blockHash,proto3" json:"block_hash,omitempty"`
+	Version       uint64                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`                          // 0 = latest/any
+	TokenIds      []int32                `protobuf:"varint,3,rep,packed,name=token_ids,json=tokenIds,proto3" json:"token_ids,omitempty"` // optional hit verification / collision guard (ADR 0016)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FetchBlock) Reset() {
+	*x = FetchBlock{}
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FetchBlock) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FetchBlock) ProtoMessage() {}
+
+func (x *FetchBlock) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FetchBlock.ProtoReflect.Descriptor instead.
+func (*FetchBlock) Descriptor() ([]byte, []int) {
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FetchBlock) GetBlockHash() []byte {
+	if x != nil {
+		return x.BlockHash
+	}
+	return nil
+}
+
+func (x *FetchBlock) GetVersion() uint64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *FetchBlock) GetTokenIds() []int32 {
+	if x != nil {
+		return x.TokenIds
+	}
+	return nil
+}
+
+// BatchKVChunk is one frame of the BatchFetch response stream, tagged with the request
+// block it belongs to. For a present block the server sends >=1 frames with found=true,
+// the last carrying last=true. For an absent/mismatched block it sends ONE frame with
+// found=false, last=true, data empty.
+type BatchKVChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Index         uint32                 `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"` // position in BatchFetchRequest.blocks this frame belongs to
+	Data          []byte                 `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Last          bool                   `protobuf:"varint,3,opt,name=last,proto3" json:"last,omitempty"`   // true on the final frame for THIS block
+	Found         bool                   `protobuf:"varint,4,opt,name=found,proto3" json:"found,omitempty"` // false => block missing/mismatch (data empty); client recomputes it
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchKVChunk) Reset() {
+	*x = BatchKVChunk{}
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchKVChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchKVChunk) ProtoMessage() {}
+
+func (x *BatchKVChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchKVChunk.ProtoReflect.Descriptor instead.
+func (*BatchKVChunk) Descriptor() ([]byte, []int) {
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *BatchKVChunk) GetIndex() uint32 {
+	if x != nil {
+		return x.Index
+	}
+	return 0
+}
+
+func (x *BatchKVChunk) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *BatchKVChunk) GetLast() bool {
+	if x != nil {
+		return x.Last
+	}
+	return false
+}
+
+func (x *BatchKVChunk) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
 type WriteChunk struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Msg:
@@ -310,7 +496,7 @@ type WriteChunk struct {
 
 func (x *WriteChunk) Reset() {
 	*x = WriteChunk{}
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[5]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -322,7 +508,7 @@ func (x *WriteChunk) String() string {
 func (*WriteChunk) ProtoMessage() {}
 
 func (x *WriteChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[5]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -335,7 +521,7 @@ func (x *WriteChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteChunk.ProtoReflect.Descriptor instead.
 func (*WriteChunk) Descriptor() ([]byte, []int) {
-	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{5}
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *WriteChunk) GetMsg() isWriteChunk_Msg {
@@ -397,7 +583,7 @@ type WriteHeader struct {
 
 func (x *WriteHeader) Reset() {
 	*x = WriteHeader{}
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[6]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -409,7 +595,7 @@ func (x *WriteHeader) String() string {
 func (*WriteHeader) ProtoMessage() {}
 
 func (x *WriteHeader) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[6]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -422,7 +608,7 @@ func (x *WriteHeader) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteHeader.ProtoReflect.Descriptor instead.
 func (*WriteHeader) Descriptor() ([]byte, []int) {
-	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{6}
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WriteHeader) GetModelId() string {
@@ -491,7 +677,7 @@ type WriteResponse struct {
 
 func (x *WriteResponse) Reset() {
 	*x = WriteResponse{}
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[7]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -503,7 +689,7 @@ func (x *WriteResponse) String() string {
 func (*WriteResponse) ProtoMessage() {}
 
 func (x *WriteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[7]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -516,7 +702,7 @@ func (x *WriteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteResponse.ProtoReflect.Descriptor instead.
 func (*WriteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{7}
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *WriteResponse) GetVersion() uint64 {
@@ -543,7 +729,7 @@ type EvictRequest struct {
 
 func (x *EvictRequest) Reset() {
 	*x = EvictRequest{}
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[8]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -555,7 +741,7 @@ func (x *EvictRequest) String() string {
 func (*EvictRequest) ProtoMessage() {}
 
 func (x *EvictRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[8]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -568,7 +754,7 @@ func (x *EvictRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvictRequest.ProtoReflect.Descriptor instead.
 func (*EvictRequest) Descriptor() ([]byte, []int) {
-	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{8}
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *EvictRequest) GetModelId() string {
@@ -594,7 +780,7 @@ type EvictResponse struct {
 
 func (x *EvictResponse) Reset() {
 	*x = EvictResponse{}
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[9]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -606,7 +792,7 @@ func (x *EvictResponse) String() string {
 func (*EvictResponse) ProtoMessage() {}
 
 func (x *EvictResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[9]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -619,7 +805,7 @@ func (x *EvictResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvictResponse.ProtoReflect.Descriptor instead.
 func (*EvictResponse) Descriptor() ([]byte, []int) {
-	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{9}
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *EvictResponse) GetEvicted() bool {
@@ -637,7 +823,7 @@ type HealthRequest struct {
 
 func (x *HealthRequest) Reset() {
 	*x = HealthRequest{}
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[10]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -649,7 +835,7 @@ func (x *HealthRequest) String() string {
 func (*HealthRequest) ProtoMessage() {}
 
 func (x *HealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[10]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -662,7 +848,7 @@ func (x *HealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthRequest.ProtoReflect.Descriptor instead.
 func (*HealthRequest) Descriptor() ([]byte, []int) {
-	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{10}
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{13}
 }
 
 type HealthResponse struct {
@@ -674,7 +860,7 @@ type HealthResponse struct {
 
 func (x *HealthResponse) Reset() {
 	*x = HealthResponse{}
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[11]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -686,7 +872,7 @@ func (x *HealthResponse) String() string {
 func (*HealthResponse) ProtoMessage() {}
 
 func (x *HealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[11]
+	mi := &file_proto_kvcache_v1_kvcache_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -699,7 +885,7 @@ func (x *HealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthResponse.ProtoReflect.Descriptor instead.
 func (*HealthResponse) Descriptor() ([]byte, []int) {
-	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{11}
+	return file_proto_kvcache_v1_kvcache_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *HealthResponse) GetOk() bool {
@@ -733,7 +919,21 @@ const file_proto_kvcache_v1_kvcache_proto_rawDesc = "" +
 	"\ttoken_ids\x18\x04 \x03(\x05R\btokenIds\"1\n" +
 	"\aKVChunk\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12\x12\n" +
-	"\x04last\x18\x02 \x01(\bR\x04last\"s\n" +
+	"\x04last\x18\x02 \x01(\bR\x04last\"^\n" +
+	"\x11BatchFetchRequest\x12\x19\n" +
+	"\bmodel_id\x18\x01 \x01(\tR\amodelId\x12.\n" +
+	"\x06blocks\x18\x02 \x03(\v2\x16.kvcache.v1.FetchBlockR\x06blocks\"b\n" +
+	"\n" +
+	"FetchBlock\x12\x1d\n" +
+	"\n" +
+	"block_hash\x18\x01 \x01(\fR\tblockHash\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x04R\aversion\x12\x1b\n" +
+	"\ttoken_ids\x18\x03 \x03(\x05R\btokenIds\"b\n" +
+	"\fBatchKVChunk\x12\x14\n" +
+	"\x05index\x18\x01 \x01(\rR\x05index\x12\x12\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\x12\x12\n" +
+	"\x04last\x18\x03 \x01(\bR\x04last\x12\x14\n" +
+	"\x05found\x18\x04 \x01(\bR\x05found\"s\n" +
 	"\n" +
 	"WriteChunk\x121\n" +
 	"\x06header\x18\x01 \x01(\v2\x17.kvcache.v1.WriteHeaderH\x00R\x06header\x12+\n" +
@@ -762,10 +962,12 @@ const file_proto_kvcache_v1_kvcache_proto_rawDesc = "" +
 	"\aevicted\x18\x01 \x01(\bR\aevicted\"\x0f\n" +
 	"\rHealthRequest\" \n" +
 	"\x0eHealthResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok2\x83\x03\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok2\xcc\x03\n" +
 	"\aKVCache\x12?\n" +
 	"\x06Lookup\x12\x19.kvcache.v1.LookupRequest\x1a\x1a.kvcache.v1.LookupResponse\x128\n" +
-	"\x05Fetch\x12\x18.kvcache.v1.FetchRequest\x1a\x13.kvcache.v1.KVChunk0\x01\x12<\n" +
+	"\x05Fetch\x12\x18.kvcache.v1.FetchRequest\x1a\x13.kvcache.v1.KVChunk0\x01\x12G\n" +
+	"\n" +
+	"BatchFetch\x12\x1d.kvcache.v1.BatchFetchRequest\x1a\x18.kvcache.v1.BatchKVChunk0\x01\x12<\n" +
 	"\x05Write\x12\x16.kvcache.v1.WriteChunk\x1a\x19.kvcache.v1.WriteResponse(\x01\x12@\n" +
 	"\tReplicate\x12\x16.kvcache.v1.WriteChunk\x1a\x19.kvcache.v1.WriteResponse(\x01\x12<\n" +
 	"\x05Evict\x12\x18.kvcache.v1.EvictRequest\x1a\x19.kvcache.v1.EvictResponse\x12?\n" +
@@ -783,42 +985,48 @@ func file_proto_kvcache_v1_kvcache_proto_rawDescGZIP() []byte {
 	return file_proto_kvcache_v1_kvcache_proto_rawDescData
 }
 
-var file_proto_kvcache_v1_kvcache_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_proto_kvcache_v1_kvcache_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_proto_kvcache_v1_kvcache_proto_goTypes = []any{
-	(*LookupRequest)(nil),  // 0: kvcache.v1.LookupRequest
-	(*LookupResponse)(nil), // 1: kvcache.v1.LookupResponse
-	(*BlockPresence)(nil),  // 2: kvcache.v1.BlockPresence
-	(*FetchRequest)(nil),   // 3: kvcache.v1.FetchRequest
-	(*KVChunk)(nil),        // 4: kvcache.v1.KVChunk
-	(*WriteChunk)(nil),     // 5: kvcache.v1.WriteChunk
-	(*WriteHeader)(nil),    // 6: kvcache.v1.WriteHeader
-	(*WriteResponse)(nil),  // 7: kvcache.v1.WriteResponse
-	(*EvictRequest)(nil),   // 8: kvcache.v1.EvictRequest
-	(*EvictResponse)(nil),  // 9: kvcache.v1.EvictResponse
-	(*HealthRequest)(nil),  // 10: kvcache.v1.HealthRequest
-	(*HealthResponse)(nil), // 11: kvcache.v1.HealthResponse
+	(*LookupRequest)(nil),     // 0: kvcache.v1.LookupRequest
+	(*LookupResponse)(nil),    // 1: kvcache.v1.LookupResponse
+	(*BlockPresence)(nil),     // 2: kvcache.v1.BlockPresence
+	(*FetchRequest)(nil),      // 3: kvcache.v1.FetchRequest
+	(*KVChunk)(nil),           // 4: kvcache.v1.KVChunk
+	(*BatchFetchRequest)(nil), // 5: kvcache.v1.BatchFetchRequest
+	(*FetchBlock)(nil),        // 6: kvcache.v1.FetchBlock
+	(*BatchKVChunk)(nil),      // 7: kvcache.v1.BatchKVChunk
+	(*WriteChunk)(nil),        // 8: kvcache.v1.WriteChunk
+	(*WriteHeader)(nil),       // 9: kvcache.v1.WriteHeader
+	(*WriteResponse)(nil),     // 10: kvcache.v1.WriteResponse
+	(*EvictRequest)(nil),      // 11: kvcache.v1.EvictRequest
+	(*EvictResponse)(nil),     // 12: kvcache.v1.EvictResponse
+	(*HealthRequest)(nil),     // 13: kvcache.v1.HealthRequest
+	(*HealthResponse)(nil),    // 14: kvcache.v1.HealthResponse
 }
 var file_proto_kvcache_v1_kvcache_proto_depIdxs = []int32{
 	2,  // 0: kvcache.v1.LookupResponse.blocks:type_name -> kvcache.v1.BlockPresence
-	6,  // 1: kvcache.v1.WriteChunk.header:type_name -> kvcache.v1.WriteHeader
-	4,  // 2: kvcache.v1.WriteChunk.chunk:type_name -> kvcache.v1.KVChunk
-	0,  // 3: kvcache.v1.KVCache.Lookup:input_type -> kvcache.v1.LookupRequest
-	3,  // 4: kvcache.v1.KVCache.Fetch:input_type -> kvcache.v1.FetchRequest
-	5,  // 5: kvcache.v1.KVCache.Write:input_type -> kvcache.v1.WriteChunk
-	5,  // 6: kvcache.v1.KVCache.Replicate:input_type -> kvcache.v1.WriteChunk
-	8,  // 7: kvcache.v1.KVCache.Evict:input_type -> kvcache.v1.EvictRequest
-	10, // 8: kvcache.v1.KVCache.Health:input_type -> kvcache.v1.HealthRequest
-	1,  // 9: kvcache.v1.KVCache.Lookup:output_type -> kvcache.v1.LookupResponse
-	4,  // 10: kvcache.v1.KVCache.Fetch:output_type -> kvcache.v1.KVChunk
-	7,  // 11: kvcache.v1.KVCache.Write:output_type -> kvcache.v1.WriteResponse
-	7,  // 12: kvcache.v1.KVCache.Replicate:output_type -> kvcache.v1.WriteResponse
-	9,  // 13: kvcache.v1.KVCache.Evict:output_type -> kvcache.v1.EvictResponse
-	11, // 14: kvcache.v1.KVCache.Health:output_type -> kvcache.v1.HealthResponse
-	9,  // [9:15] is the sub-list for method output_type
-	3,  // [3:9] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	6,  // 1: kvcache.v1.BatchFetchRequest.blocks:type_name -> kvcache.v1.FetchBlock
+	9,  // 2: kvcache.v1.WriteChunk.header:type_name -> kvcache.v1.WriteHeader
+	4,  // 3: kvcache.v1.WriteChunk.chunk:type_name -> kvcache.v1.KVChunk
+	0,  // 4: kvcache.v1.KVCache.Lookup:input_type -> kvcache.v1.LookupRequest
+	3,  // 5: kvcache.v1.KVCache.Fetch:input_type -> kvcache.v1.FetchRequest
+	5,  // 6: kvcache.v1.KVCache.BatchFetch:input_type -> kvcache.v1.BatchFetchRequest
+	8,  // 7: kvcache.v1.KVCache.Write:input_type -> kvcache.v1.WriteChunk
+	8,  // 8: kvcache.v1.KVCache.Replicate:input_type -> kvcache.v1.WriteChunk
+	11, // 9: kvcache.v1.KVCache.Evict:input_type -> kvcache.v1.EvictRequest
+	13, // 10: kvcache.v1.KVCache.Health:input_type -> kvcache.v1.HealthRequest
+	1,  // 11: kvcache.v1.KVCache.Lookup:output_type -> kvcache.v1.LookupResponse
+	4,  // 12: kvcache.v1.KVCache.Fetch:output_type -> kvcache.v1.KVChunk
+	7,  // 13: kvcache.v1.KVCache.BatchFetch:output_type -> kvcache.v1.BatchKVChunk
+	10, // 14: kvcache.v1.KVCache.Write:output_type -> kvcache.v1.WriteResponse
+	10, // 15: kvcache.v1.KVCache.Replicate:output_type -> kvcache.v1.WriteResponse
+	12, // 16: kvcache.v1.KVCache.Evict:output_type -> kvcache.v1.EvictResponse
+	14, // 17: kvcache.v1.KVCache.Health:output_type -> kvcache.v1.HealthResponse
+	11, // [11:18] is the sub-list for method output_type
+	4,  // [4:11] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proto_kvcache_v1_kvcache_proto_init() }
@@ -826,7 +1034,7 @@ func file_proto_kvcache_v1_kvcache_proto_init() {
 	if File_proto_kvcache_v1_kvcache_proto != nil {
 		return
 	}
-	file_proto_kvcache_v1_kvcache_proto_msgTypes[5].OneofWrappers = []any{
+	file_proto_kvcache_v1_kvcache_proto_msgTypes[8].OneofWrappers = []any{
 		(*WriteChunk_Header)(nil),
 		(*WriteChunk_Chunk)(nil),
 	}
@@ -836,7 +1044,7 @@ func file_proto_kvcache_v1_kvcache_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_kvcache_v1_kvcache_proto_rawDesc), len(file_proto_kvcache_v1_kvcache_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

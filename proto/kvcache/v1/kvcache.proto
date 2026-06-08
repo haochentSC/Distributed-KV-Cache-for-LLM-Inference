@@ -17,6 +17,16 @@ service KVCache {
   // Fetch server-streams one block's KV tensor bytes in bounded chunks (ADR 0012).
   rpc Fetch(FetchRequest) returns (stream KVChunk);
 
+  // BatchFetch server-streams MANY blocks' KV bytes over ONE call, so a multi-block
+  // prefix load pays a single round-trip instead of one per block (the load path is
+  // latency-bound on the per-block RTT, not bandwidth — Phase 4.5 finding). The request
+  // lists blocks in load order; every response frame carries the block's `index` so the
+  // client demuxes. The server streams blocks in order (no interleave), but the index
+  // makes the client robust regardless. A missing/mismatched block is reported with a
+  // single terminal frame (found=false, last=true, no data) so one absent block never
+  // fails the whole batch — the client just recomputes that block (ADR 0013/0016).
+  rpc BatchFetch(BatchFetchRequest) returns (stream BatchKVChunk);
+
   // Write client-streams one block. The FIRST message MUST be a WriteHeader; the
   // rest are KVChunk data frames (ADR 0012). The receiving shard is the PRIMARY for
   // this block (the ring owner); it assigns the version and asynchronously forwards
@@ -66,6 +76,30 @@ message FetchRequest {
 message KVChunk {
   bytes data = 1;
   bool last = 2; // true on the final frame
+}
+
+message BatchFetchRequest {
+  string model_id = 1;            // one model for the whole batch
+  repeated FetchBlock blocks = 2; // in load order; a block's index is its position here
+}
+
+// FetchBlock is one block's lookup key inside a BatchFetchRequest — the same fields a
+// single FetchRequest carries, minus model_id (shared by the batch).
+message FetchBlock {
+  bytes block_hash = 1;
+  uint64 version = 2;           // 0 = latest/any
+  repeated int32 token_ids = 3; // optional hit verification / collision guard (ADR 0016)
+}
+
+// BatchKVChunk is one frame of the BatchFetch response stream, tagged with the request
+// block it belongs to. For a present block the server sends >=1 frames with found=true,
+// the last carrying last=true. For an absent/mismatched block it sends ONE frame with
+// found=false, last=true, data empty.
+message BatchKVChunk {
+  uint32 index = 1; // position in BatchFetchRequest.blocks this frame belongs to
+  bytes data = 2;
+  bool last = 3;    // true on the final frame for THIS block
+  bool found = 4;   // false => block missing/mismatch (data empty); client recomputes it
 }
 
 message WriteChunk {

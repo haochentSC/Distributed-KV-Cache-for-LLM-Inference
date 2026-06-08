@@ -1,0 +1,25 @@
+{
+  "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+  "cache_addr": "localhost:50051",
+  "block_tokens": 16,
+  "runs": 8,
+  "baseline_ms": {
+    "p50": 72.36737399989579,
+    "p95": 610.2973199999724,
+    "p99": 610.2973199999724,
+    "mean": 124.53957037496366
+  },
+  "external_cold_ms": {
+    "p50": 236.5333190000456,
+    "p95": 236.5333190000456,
+    "p99": 236.5333190000456,
+    "mean": 236.5333190000456
+  },
+  "external_warm_ms": {
+    "p50": 109.08787200014558,
+    "p95": 112.06849300015165,
+    "p99": 112.06849300015165,
+    "mean": 108.69292750015802
+  },
+  "notes": "Wall-clock one-token generation latency used as TTFT proxy."
+}

@@ -5,7 +5,7 @@ import warnings
 
 from kvcache.v1 import kvcache_pb2 as kvcache_dot_v1_dot_kvcache__pb2
 
-GRPC_GENERATED_VERSION = '1.80.0'
+GRPC_GENERATED_VERSION = '1.81.0'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -25,7 +25,7 @@ if _version_not_supported:
     )
 
 
-class KVCacheStub(object):
+class KVCacheStub:
     """KVCache stores serialized attention KV tensors keyed by an opaque 32-byte block
     hash. The hash is computed client-side (chained SHA-256 over token IDs, ADR 0011);
     the server treats it as opaque (ADR 0010). See docs/01-architecture.md.
@@ -47,8 +47,18 @@ class KVCacheStub(object):
                 request_serializer=kvcache_dot_v1_dot_kvcache__pb2.FetchRequest.SerializeToString,
                 response_deserializer=kvcache_dot_v1_dot_kvcache__pb2.KVChunk.FromString,
                 _registered_method=True)
+        self.BatchFetch = channel.unary_stream(
+                '/kvcache.v1.KVCache/BatchFetch',
+                request_serializer=kvcache_dot_v1_dot_kvcache__pb2.BatchFetchRequest.SerializeToString,
+                response_deserializer=kvcache_dot_v1_dot_kvcache__pb2.BatchKVChunk.FromString,
+                _registered_method=True)
         self.Write = channel.stream_unary(
                 '/kvcache.v1.KVCache/Write',
+                request_serializer=kvcache_dot_v1_dot_kvcache__pb2.WriteChunk.SerializeToString,
+                response_deserializer=kvcache_dot_v1_dot_kvcache__pb2.WriteResponse.FromString,
+                _registered_method=True)
+        self.Replicate = channel.stream_unary(
+                '/kvcache.v1.KVCache/Replicate',
                 request_serializer=kvcache_dot_v1_dot_kvcache__pb2.WriteChunk.SerializeToString,
                 response_deserializer=kvcache_dot_v1_dot_kvcache__pb2.WriteResponse.FromString,
                 _registered_method=True)
@@ -64,7 +74,7 @@ class KVCacheStub(object):
                 _registered_method=True)
 
 
-class KVCacheServicer(object):
+class KVCacheServicer:
     """KVCache stores serialized attention KV tensors keyed by an opaque 32-byte block
     hash. The hash is computed client-side (chained SHA-256 over token IDs, ADR 0011);
     the server treats it as opaque (ADR 0010). See docs/01-architecture.md.
@@ -87,9 +97,40 @@ class KVCacheServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def BatchFetch(self, request, context):
+        """BatchFetch server-streams MANY blocks' KV bytes over ONE call, so a multi-block
+        prefix load pays a single round-trip instead of one per block (the load path is
+        latency-bound on the per-block RTT, not bandwidth — Phase 4.5 finding). The request
+        lists blocks in load order; every response frame carries the block's `index` so the
+        client demuxes. The server streams blocks in order (no interleave), but the index
+        makes the client robust regardless. A missing/mismatched block is reported with a
+        single terminal frame (found=false, last=true, no data) so one absent block never
+        fails the whole batch — the client just recomputes that block (ADR 0013/0016).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def Write(self, request_iterator, context):
         """Write client-streams one block. The FIRST message MUST be a WriteHeader; the
-        rest are KVChunk data frames (ADR 0012).
+        rest are KVChunk data frames (ADR 0012). The receiving shard is the PRIMARY for
+        this block (the ring owner); it assigns the version and asynchronously forwards
+        the block to its replica via Replicate (Phase 3 Sub-stage B, ADR 0021).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Replicate(self, request_iterator, context):
+        """Replicate is the PRIMARY->REPLICA copy path (Sub-stage B). Same wire shape as
+        Write (a WriteHeader then KVChunk frames), with two differences in meaning:
+        - The header's `version` field is AUTHORITATIVE: the replica stores the block
+        under the primary's assigned version, it does NOT mint its own (so primary
+        and replica versions never diverge).
+        - The replica stores locally and MUST NOT re-forward — this is what prevents a
+        replication loop (each node forwarding to its own replica forever).
+        Cache data is eventually consistent (ADR 0013), so this is fire-and-forget from
+        the primary's side: the client was already acked before this ran.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -122,8 +163,18 @@ def add_KVCacheServicer_to_server(servicer, server):
                     request_deserializer=kvcache_dot_v1_dot_kvcache__pb2.FetchRequest.FromString,
                     response_serializer=kvcache_dot_v1_dot_kvcache__pb2.KVChunk.SerializeToString,
             ),
+            'BatchFetch': grpc.unary_stream_rpc_method_handler(
+                    servicer.BatchFetch,
+                    request_deserializer=kvcache_dot_v1_dot_kvcache__pb2.BatchFetchRequest.FromString,
+                    response_serializer=kvcache_dot_v1_dot_kvcache__pb2.BatchKVChunk.SerializeToString,
+            ),
             'Write': grpc.stream_unary_rpc_method_handler(
                     servicer.Write,
+                    request_deserializer=kvcache_dot_v1_dot_kvcache__pb2.WriteChunk.FromString,
+                    response_serializer=kvcache_dot_v1_dot_kvcache__pb2.WriteResponse.SerializeToString,
+            ),
+            'Replicate': grpc.stream_unary_rpc_method_handler(
+                    servicer.Replicate,
                     request_deserializer=kvcache_dot_v1_dot_kvcache__pb2.WriteChunk.FromString,
                     response_serializer=kvcache_dot_v1_dot_kvcache__pb2.WriteResponse.SerializeToString,
             ),
@@ -145,7 +196,7 @@ def add_KVCacheServicer_to_server(servicer, server):
 
 
  # This class is part of an EXPERIMENTAL API.
-class KVCache(object):
+class KVCache:
     """KVCache stores serialized attention KV tensors keyed by an opaque 32-byte block
     hash. The hash is computed client-side (chained SHA-256 over token IDs, ADR 0011);
     the server treats it as opaque (ADR 0010). See docs/01-architecture.md.
@@ -206,6 +257,33 @@ class KVCache(object):
             _registered_method=True)
 
     @staticmethod
+    def BatchFetch(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_stream(
+            request,
+            target,
+            '/kvcache.v1.KVCache/BatchFetch',
+            kvcache_dot_v1_dot_kvcache__pb2.BatchFetchRequest.SerializeToString,
+            kvcache_dot_v1_dot_kvcache__pb2.BatchKVChunk.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
     def Write(request_iterator,
             target,
             options=(),
@@ -220,6 +298,33 @@ class KVCache(object):
             request_iterator,
             target,
             '/kvcache.v1.KVCache/Write',
+            kvcache_dot_v1_dot_kvcache__pb2.WriteChunk.SerializeToString,
+            kvcache_dot_v1_dot_kvcache__pb2.WriteResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Replicate(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_unary(
+            request_iterator,
+            target,
+            '/kvcache.v1.KVCache/Replicate',
             kvcache_dot_v1_dot_kvcache__pb2.WriteChunk.SerializeToString,
             kvcache_dot_v1_dot_kvcache__pb2.WriteResponse.FromString,
             options,

@@ -38,9 +38,10 @@ If HC is stuck, Claude gives a hint or leading question before the answer.
       in-memory shard, vLLM `KVConnectorBase_V1` integration, synthetic load generator, TTFT
       benchmark. **Current (verified 2026-05-25):** CPU-only core done + clean (server, striped
       store, block-hash, load generator, eviction seam, Python support libs; build/vet/gofmt/plain
-      test pass). **Deferred to Phase 4.5 (GPU path):** the vLLM tensor-copy hooks and the TTFT exit
-      gate (ADR 0015) — both stubbed, both need WSL2 + local GPU. `-race` must run in WSL2 (this
-      Windows box has 32-bit MinGW).
+      test pass). **Resolved in Phase 4.5 (2026-06-08, ADR 0031):** the vLLM tensor-copy hooks are
+      wired and the TTFT exit gate (ADR 0015) is *measured* — it inverts at single-node ≤3B (load
+      4.7 ms/block > recompute 3.4 ms/block, env-capped), so the headline win moves to the distributed
+      cloud run. `-race` now passes in WSL2 (this Windows box has 32-bit MinGW).
 - [~] **Phase 2 - Two-node distributed cache (local-first, then AWS):** consistent-hash ring
       (prefix-affinity, ADR 0014), client-side routing with degrade-to-miss, multi-process local
       harness, then Terraform cluster on AWS. **etcd deferred to Phase 3 (ADR 0018):** static ring
@@ -58,7 +59,15 @@ If HC is stuck, Claude gives a hint or leading question before the answer.
       AWS cluster live + verified (ADR 0028, first `terraform apply` 2026-06-06). **Deferred AWS
       batch (one paid window):** cold-tier round-trip verify, AWS chaos (`tc`/`iptables`), CloudWatch
       alarm wiring, and re-running the Phase-5 benchmarks on the 3-node cluster.
-- [ ] **Phase 4.5 - GPU benchmark:** real vLLM + GPU TTFT number, then destroy GPU resources.
+- [x] **Phase 4.5 - GPU benchmark (single-node, done 2026-06-08; distributed run deferred to cloud).**
+      Wired the vLLM worker-side tensor-copy hooks (probe live paged-KV layout → save full blocks →
+      load back into paged slots) + a BatchFetch RPC; ran TTFT on TinyLlama-1.1B and Qwen2.5-3B
+      (RTX 3080, WSL2, vLLM 0.22.1). **Finding (ADR 0031):** save/load works + is correct, but the
+      ADR 0015 inequality *inverts* at single-node ≤3B — external load 4.7 ms/block vs recompute
+      3.4 ms/block — bottlenecked by Python serialization + **unpinned** H2D copy (WSL2
+      `pin_memory=False`), proven by a null BatchFetch result. Deficit closes with model size
+      (−169% @1B → ~−48% @3B). **The headline TTFT win is deferred to the distributed/cloud GPU run**
+      (pinned memory + zero-copy transport + non-throttled KV cache) — bundled with the AWS paid batch.
 - [x] **Phase 5 - Differentiator: cost-aware + fairness eviction (complete, local, 2026-06-07).**
       5a (ADR 0029): GDSF cost-aware value `H = L + freq·cost/size` + static per-tenant caps. 5b
       (ADR 0030): elastic work-conserving floors + the `fairness_weight ∈ [0,1]` knob

@@ -160,35 +160,113 @@ func (s *Server) Fetch(req *kvcachev1.FetchRequest, stream kvcachev1.KVCache_Fet
 // fetchFromCold serves a hot miss from the cold tier (ADR 0027). It returns served=true ONLY when
 // it streamed matching bytes; a cold miss, a storage error, or a version/token mismatch all return
 // served=false so Fetch emits NotFound (upholding ADR 0016 — we never stream non-matching bytes).
-// On a cold hit it re-admits the block to the hot store so repeat fetches stay fast.
 func (s *Server) fetchFromCold(stream kvcachev1.KVCache_FetchServer, req *kvcachev1.FetchRequest, h cache.BlockHash) (bool, error) {
+	kv, ok := s.coldHit(stream.Context(), req.GetModelId(), h, req.GetVersion(), req.GetTokenIds())
+	if !ok {
+		return false, nil
+	}
+	return true, streamKV(stream, kv)
+}
+
+// coldHit is the cold-tier read-through decision shared by Fetch and BatchFetch: fetch from the
+// cold tier, apply the SAME version/token guards as the hot path, re-admit on a hit, and return
+// the bytes to stream. ok=false means "not a usable hit" (cold miss, storage error, or guard
+// mismatch) — the caller degrades to a recompute, never to wrong bytes (ADR 0013/0016). On a hit
+// it re-admits to the hot store so repeat fetches skip the cold round-trip, but skips the re-admit
+// if that would breach the hard ceiling (the evictor would just spill it straight back —
+// admit→evict→spill thrash). Re-admit is at the ORIGINAL version so a replica's copy still agrees.
+func (s *Server) coldHit(ctx context.Context, model string, h cache.BlockHash, version uint64, tokenIDs []int32) ([]byte, bool) {
 	if s.cold == nil {
-		return false, nil
+		return nil, false
 	}
-	model := req.GetModelId()
-	kv, version, tokenIDs, ok, err := s.cold.Get(stream.Context(), model, h)
+	kv, ver, toks, ok, err := s.cold.Get(ctx, model, h)
 	if err != nil || !ok {
-		// A storage error is logged by the tier and treated as a miss here — degrade to a
-		// recompute, never to wrong bytes (ADR 0013/0016).
-		return false, nil
+		return nil, false
 	}
-	// Apply the SAME guards as the hot path: a pinned version or supplied token_ids must match,
-	// or this is not a usable hit (ADR 0016).
-	if v := req.GetVersion(); v != 0 && v != version {
-		return false, nil
+	if version != 0 && version != ver {
+		return nil, false
 	}
-	if toks := req.GetTokenIds(); len(toks) > 0 && !slices.Equal(toks, tokenIDs) {
-		return false, nil
+	if len(tokenIDs) > 0 && !slices.Equal(tokenIDs, toks) {
+		return nil, false
 	}
-	// Re-admit to the hot store so repeat fetches don't pay the cold round-trip — but skip it if
-	// that would breach the hard ceiling, since the evictor would just spill it straight back
-	// (admit→evict→spill thrash). Re-admit at the ORIGINAL version (PutWithVersion) so a copy held
-	// by a replica still agrees on the version. Best-effort; a skipped re-admit is harmless.
 	if !s.store.OverHardLimit(int64(len(kv))) {
-		s.store.PutWithVersion(h, &cache.Entry{ModelID: model, KV: kv, TokenIDs: tokenIDs}, version)
+		s.store.PutWithVersion(h, &cache.Entry{ModelID: model, KV: kv, TokenIDs: toks}, ver)
 	}
 	s.metrics.Hit("fetch_cold")
-	return true, streamKV(stream, kv)
+	return kv, true
+}
+
+// BatchFetch streams many blocks' KV bytes over one call (proto comment has the contract). Each
+// block is resolved exactly like Fetch — hot Get, then cold read-through, then the version/token
+// guards — but failures are per-block: a malformed hash, a miss, or a guard mismatch emits a single
+// found=false terminal frame for that index and the loop continues, so one absent block never
+// fails the batch (ADR 0013/0016). Blocks are streamed in request order; the index tag lets the
+// client demux regardless.
+func (s *Server) BatchFetch(req *kvcachev1.BatchFetchRequest, stream kvcachev1.KVCache_BatchFetchServer) error {
+	model := req.GetModelId()
+	for i, fb := range req.GetBlocks() {
+		idx := uint32(i)
+		h, ok := toBlockHash(fb.GetBlockHash())
+		if !ok {
+			s.metrics.Miss("batch_fetch")
+			if err := sendNotFound(stream, idx); err != nil {
+				return err
+			}
+			continue
+		}
+		kv, ok := s.batchResolve(stream.Context(), model, fb, h)
+		if !ok {
+			s.metrics.Miss("batch_fetch")
+			if err := sendNotFound(stream, idx); err != nil {
+				return err
+			}
+			continue
+		}
+		s.metrics.Hit("batch_fetch")
+		if err := streamBatchKV(stream, idx, kv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// batchResolve returns one block's bytes for BatchFetch: the hot store first (with the version/
+// token guards), then the cold tier via the shared coldHit. ok=false => not a usable hit.
+func (s *Server) batchResolve(ctx context.Context, model string, fb *kvcachev1.FetchBlock, h cache.BlockHash) ([]byte, bool) {
+	e, hit := s.store.Get(model, h)
+	if !hit {
+		return s.coldHit(ctx, model, h, fb.GetVersion(), fb.GetTokenIds())
+	}
+	if v := fb.GetVersion(); v != 0 && v != e.Version {
+		return nil, false
+	}
+	if toks := fb.GetTokenIds(); len(toks) > 0 && !slices.Equal(toks, e.TokenIDs) {
+		return nil, false
+	}
+	return e.KV, true // e.KV is an immutable snapshot — safe to stream lock-free
+}
+
+// sendNotFound emits the single terminal frame that marks a batch block as absent/mismatched.
+func sendNotFound(stream kvcachev1.KVCache_BatchFetchServer, idx uint32) error {
+	return stream.Send(&kvcachev1.BatchKVChunk{Index: idx, Found: false, Last: true})
+}
+
+// streamBatchKV streams one present block's bytes as found=true frames, tagged with idx and
+// terminating with last=true (one empty frame for an empty payload), mirroring streamKV.
+func streamBatchKV(stream kvcachev1.KVCache_BatchFetchServer, idx uint32, data []byte) error {
+	for off := 0; off < len(data); off += fetchChunkBytes {
+		end := off + fetchChunkBytes
+		if end > len(data) {
+			end = len(data)
+		}
+		if err := stream.Send(&kvcachev1.BatchKVChunk{Index: idx, Data: data[off:end], Found: true, Last: end == len(data)}); err != nil {
+			return err
+		}
+	}
+	if len(data) == 0 {
+		return stream.Send(&kvcachev1.BatchKVChunk{Index: idx, Found: true, Last: true})
+	}
+	return nil
 }
 
 // streamKV server-streams data in bounded chunks, terminating with Last=true (one empty frame for

@@ -100,6 +100,69 @@ class KVCacheClient:
             return None
         return bytes(out)
 
+    def batch_fetch(
+        self,
+        model_id: str,
+        blocks: Iterable[Block],
+        versions: Iterable[int],
+    ) -> list[bytes | None]:
+        """Fetch many blocks in ONE round-trip; returns payloads parallel to ``blocks``.
+
+        Collapses N sequential ``fetch`` RPCs into a single BatchFetch stream — the load
+        path is latency-bound on the per-block RTT, so this is the dominant speedup
+        (Phase 4.5). Each element is the block's bytes, or ``None`` for a miss / version
+        or token mismatch / truncated stream — the caller recomputes those blocks. A
+        whole-RPC failure returns all ``None`` (degrade to recompute, never wrong bytes).
+        """
+        block_list = list(blocks)
+        ver_list = list(versions)
+        start = time.perf_counter()
+        buffers = [bytearray() for _ in block_list]
+        found = [False] * len(block_list)
+        done = [False] * len(block_list)
+        total = 0
+        try:
+            stream = self.stub.BatchFetch(
+                kvcache_pb2.BatchFetchRequest(
+                    model_id=model_id,
+                    blocks=[
+                        kvcache_pb2.FetchBlock(
+                            block_hash=b.hash,
+                            version=v,
+                            token_ids=list(b.token_ids),
+                        )
+                        for b, v in zip(block_list, ver_list)
+                    ],
+                ),
+                timeout=self.deadline_s,
+            )
+            for chunk in stream:
+                i = chunk.index
+                if i >= len(block_list):
+                    continue  # defensive: ignore an out-of-range index
+                if not chunk.found:
+                    done[i] = True
+                    continue
+                found[i] = True
+                buffers[i].extend(chunk.data)
+                total += len(chunk.data)
+                if chunk.last:
+                    done[i] = True
+        except grpc.RpcError:
+            return [None for _ in block_list]
+        finally:
+            self.stats = ClientStats(
+                lookup_ms=self.stats.lookup_ms,
+                fetch_ms=self.stats.fetch_ms + elapsed_ms(start),
+                write_ms=self.stats.write_ms,
+                bytes_fetched=self.stats.bytes_fetched + total,
+                bytes_written=self.stats.bytes_written,
+            )
+        return [
+            bytes(buffers[i]) if (found[i] and done[i]) else None
+            for i in range(len(block_list))
+        ]
+
     def write(
         self,
         model_id: str,

@@ -19,12 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KVCache_Lookup_FullMethodName    = "/kvcache.v1.KVCache/Lookup"
-	KVCache_Fetch_FullMethodName     = "/kvcache.v1.KVCache/Fetch"
-	KVCache_Write_FullMethodName     = "/kvcache.v1.KVCache/Write"
-	KVCache_Replicate_FullMethodName = "/kvcache.v1.KVCache/Replicate"
-	KVCache_Evict_FullMethodName     = "/kvcache.v1.KVCache/Evict"
-	KVCache_Health_FullMethodName    = "/kvcache.v1.KVCache/Health"
+	KVCache_Lookup_FullMethodName     = "/kvcache.v1.KVCache/Lookup"
+	KVCache_Fetch_FullMethodName      = "/kvcache.v1.KVCache/Fetch"
+	KVCache_BatchFetch_FullMethodName = "/kvcache.v1.KVCache/BatchFetch"
+	KVCache_Write_FullMethodName      = "/kvcache.v1.KVCache/Write"
+	KVCache_Replicate_FullMethodName  = "/kvcache.v1.KVCache/Replicate"
+	KVCache_Evict_FullMethodName      = "/kvcache.v1.KVCache/Evict"
+	KVCache_Health_FullMethodName     = "/kvcache.v1.KVCache/Health"
 )
 
 // KVCacheClient is the client API for KVCache service.
@@ -42,6 +43,15 @@ type KVCacheClient interface {
 	Lookup(ctx context.Context, in *LookupRequest, opts ...grpc.CallOption) (*LookupResponse, error)
 	// Fetch server-streams one block's KV tensor bytes in bounded chunks (ADR 0012).
 	Fetch(ctx context.Context, in *FetchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[KVChunk], error)
+	// BatchFetch server-streams MANY blocks' KV bytes over ONE call, so a multi-block
+	// prefix load pays a single round-trip instead of one per block (the load path is
+	// latency-bound on the per-block RTT, not bandwidth — Phase 4.5 finding). The request
+	// lists blocks in load order; every response frame carries the block's `index` so the
+	// client demuxes. The server streams blocks in order (no interleave), but the index
+	// makes the client robust regardless. A missing/mismatched block is reported with a
+	// single terminal frame (found=false, last=true, no data) so one absent block never
+	// fails the whole batch — the client just recomputes that block (ADR 0013/0016).
+	BatchFetch(ctx context.Context, in *BatchFetchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BatchKVChunk], error)
 	// Write client-streams one block. The FIRST message MUST be a WriteHeader; the
 	// rest are KVChunk data frames (ADR 0012). The receiving shard is the PRIMARY for
 	// this block (the ring owner); it assigns the version and asynchronously forwards
@@ -101,9 +111,28 @@ func (c *kVCacheClient) Fetch(ctx context.Context, in *FetchRequest, opts ...grp
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type KVCache_FetchClient = grpc.ServerStreamingClient[KVChunk]
 
+func (c *kVCacheClient) BatchFetch(ctx context.Context, in *BatchFetchRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[BatchKVChunk], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &KVCache_ServiceDesc.Streams[1], KVCache_BatchFetch_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[BatchFetchRequest, BatchKVChunk]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type KVCache_BatchFetchClient = grpc.ServerStreamingClient[BatchKVChunk]
+
 func (c *kVCacheClient) Write(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteChunk, WriteResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &KVCache_ServiceDesc.Streams[1], KVCache_Write_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &KVCache_ServiceDesc.Streams[2], KVCache_Write_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +145,7 @@ type KVCache_WriteClient = grpc.ClientStreamingClient[WriteChunk, WriteResponse]
 
 func (c *kVCacheClient) Replicate(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[WriteChunk, WriteResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &KVCache_ServiceDesc.Streams[2], KVCache_Replicate_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &KVCache_ServiceDesc.Streams[3], KVCache_Replicate_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +191,15 @@ type KVCacheServer interface {
 	Lookup(context.Context, *LookupRequest) (*LookupResponse, error)
 	// Fetch server-streams one block's KV tensor bytes in bounded chunks (ADR 0012).
 	Fetch(*FetchRequest, grpc.ServerStreamingServer[KVChunk]) error
+	// BatchFetch server-streams MANY blocks' KV bytes over ONE call, so a multi-block
+	// prefix load pays a single round-trip instead of one per block (the load path is
+	// latency-bound on the per-block RTT, not bandwidth — Phase 4.5 finding). The request
+	// lists blocks in load order; every response frame carries the block's `index` so the
+	// client demuxes. The server streams blocks in order (no interleave), but the index
+	// makes the client robust regardless. A missing/mismatched block is reported with a
+	// single terminal frame (found=false, last=true, no data) so one absent block never
+	// fails the whole batch — the client just recomputes that block (ADR 0013/0016).
+	BatchFetch(*BatchFetchRequest, grpc.ServerStreamingServer[BatchKVChunk]) error
 	// Write client-streams one block. The FIRST message MUST be a WriteHeader; the
 	// rest are KVChunk data frames (ADR 0012). The receiving shard is the PRIMARY for
 	// this block (the ring owner); it assigns the version and asynchronously forwards
@@ -197,6 +235,9 @@ func (UnimplementedKVCacheServer) Lookup(context.Context, *LookupRequest) (*Look
 }
 func (UnimplementedKVCacheServer) Fetch(*FetchRequest, grpc.ServerStreamingServer[KVChunk]) error {
 	return status.Error(codes.Unimplemented, "method Fetch not implemented")
+}
+func (UnimplementedKVCacheServer) BatchFetch(*BatchFetchRequest, grpc.ServerStreamingServer[BatchKVChunk]) error {
+	return status.Error(codes.Unimplemented, "method BatchFetch not implemented")
 }
 func (UnimplementedKVCacheServer) Write(grpc.ClientStreamingServer[WriteChunk, WriteResponse]) error {
 	return status.Error(codes.Unimplemented, "method Write not implemented")
@@ -259,6 +300,17 @@ func _KVCache_Fetch_Handler(srv interface{}, stream grpc.ServerStream) error {
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type KVCache_FetchServer = grpc.ServerStreamingServer[KVChunk]
+
+func _KVCache_BatchFetch_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(BatchFetchRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(KVCacheServer).BatchFetch(m, &grpc.GenericServerStream[BatchFetchRequest, BatchKVChunk]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type KVCache_BatchFetchServer = grpc.ServerStreamingServer[BatchKVChunk]
 
 func _KVCache_Write_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(KVCacheServer).Write(&grpc.GenericServerStream[WriteChunk, WriteResponse]{ServerStream: stream})
@@ -334,6 +386,11 @@ var KVCache_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "Fetch",
 			Handler:       _KVCache_Fetch_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "BatchFetch",
+			Handler:       _KVCache_BatchFetch_Handler,
 			ServerStreams: true,
 		},
 		{

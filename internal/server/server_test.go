@@ -166,3 +166,109 @@ func TestFetchRejectsBadHashLength(t *testing.T) {
 		t.Fatalf("Fetch code = %v, want InvalidArgument", status.Code(err))
 	}
 }
+
+// batchBlock is one demuxed block from a BatchFetch stream: its assembled bytes plus the
+// per-block found/last terminal flags.
+type batchBlock struct {
+	data  []byte
+	found bool
+	last  bool
+}
+
+// batchFetchAll drains a BatchFetch stream into a per-index result map, asserting that
+// every index it saw terminated with last=true.
+func batchFetchAll(t *testing.T, client kvcachev1.KVCacheClient, req *kvcachev1.BatchFetchRequest) map[uint32]*batchBlock {
+	t.Helper()
+	stream, err := client.BatchFetch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("BatchFetch: %v", err)
+	}
+	out := map[uint32]*batchBlock{}
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("BatchFetch Recv: %v", err)
+		}
+		b := out[chunk.GetIndex()]
+		if b == nil {
+			b = &batchBlock{}
+			out[chunk.GetIndex()] = b
+		}
+		b.data = append(b.data, chunk.GetData()...)
+		b.found = b.found || chunk.GetFound()
+		if chunk.GetLast() {
+			b.last = true
+		}
+	}
+	for idx, b := range out {
+		if !b.last {
+			t.Fatalf("index %d never terminated with last=true", idx)
+		}
+	}
+	return out
+}
+
+func TestBatchFetchDemuxesAndIsolatesMisses(t *testing.T) {
+	client, cleanup := testClient(t)
+	defer cleanup()
+
+	model := "model-a"
+	h0, h1, missing := hashBytes(1), hashBytes(2), hashBytes(9)
+	tok0, tok1 := []int32{1, 2, 3, 4}, []int32{5, 6, 7, 8}
+	pay0, pay1 := []byte("block-zero-bytes"), []byte("block-one-bytes")
+	v0 := writeBlock(t, client, model, h0, tok0, pay0)
+	writeBlock(t, client, model, h1, tok1, pay1)
+
+	// One request mixing: a hit, another hit, an absent block, a present hash at the wrong
+	// version. Order matters — the index tag must map each frame back to its slot.
+	got := batchFetchAll(t, client, &kvcachev1.BatchFetchRequest{
+		ModelId: model,
+		Blocks: []*kvcachev1.FetchBlock{
+			{BlockHash: h0, Version: v0, TokenIds: tok0},
+			{BlockHash: h1},
+			{BlockHash: missing},
+			{BlockHash: h0, Version: v0 + 1}, // wrong version -> not found
+		},
+	})
+
+	cases := []struct {
+		idx       uint32
+		wantFound bool
+		wantData  []byte
+	}{
+		{0, true, pay0},
+		{1, true, pay1},
+		{2, false, nil},
+		{3, false, nil},
+	}
+	for _, tc := range cases {
+		b, ok := got[tc.idx]
+		if !ok {
+			t.Fatalf("index %d missing from response", tc.idx)
+		}
+		if b.found != tc.wantFound {
+			t.Fatalf("index %d found = %v, want %v", tc.idx, b.found, tc.wantFound)
+		}
+		if string(b.data) != string(tc.wantData) {
+			t.Fatalf("index %d data = %q, want %q", tc.idx, b.data, tc.wantData)
+		}
+	}
+}
+
+func TestBatchFetchReportsBadHashAsMiss(t *testing.T) {
+	client, cleanup := testClient(t)
+	defer cleanup()
+
+	// A malformed hash must not fail the whole batch — it comes back as a per-block miss.
+	got := batchFetchAll(t, client, &kvcachev1.BatchFetchRequest{
+		ModelId: "m",
+		Blocks:  []*kvcachev1.FetchBlock{{BlockHash: []byte{1, 2, 3}}},
+	})
+	b, ok := got[0]
+	if !ok || b.found {
+		t.Fatalf("bad-hash block: got %+v, want found=false terminal frame", b)
+	}
+}

@@ -23,7 +23,11 @@ vllm = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+# Two source roots: the connector package lives under src/, and the proto-generated
+# stubs expose `kvcache` as a TOP-LEVEL package from src/kvcache_proto (the generated
+# grpc code does `from kvcache.v1 import ...`). Both must be importable at runtime, not
+# just under pytest's `pythonpath` below — otherwise vLLM's process can't import the client.
+where = ["src", "src/kvcache_proto"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

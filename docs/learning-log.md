@@ -16,6 +16,40 @@
 
 ---
 
+## Phase 4.5 - End-to-end GPU TTFT benchmark
+
+### 2026-06-08 - The cache loses on a laptop — and the *why* is the whole lesson
+**Phase:** 4.5 (the one number that needs a real GPU; single-node, RTX 3080 + WSL2)
+**What I was doing:** Wired the stubbed vLLM worker-side tensor-copy hooks (probe the live paged-KV
+layout → save full blocks → load them back into paged slots), then benchmarked TTFT with/without the
+external cache, hunting for the crossover where caching wins (ADR 0031).
+**What I learned / what broke:**
+- **The live KV layout is one integer.** vLLM v1 / FlashAttention v2 stores each layer's KV as
+  `[2, num_blocks, block_size, num_kv_heads, head_dim]` bf16, `block_axis=1`. Parameterizing the
+  block-copy on just that axis kept the mechanics CPU-unit-testable (no GPU, no vLLM). bf16 bit me:
+  numpy can't represent it, so `tensor.numpy()` crashes — reinterpret as uint8 bytes instead.
+- **The cache did not beat recompute at ≤3B — but the deficit quartered from 1B→3B** (−169% → ~−48%).
+  Prefill is O(n²)·model-size; external load cost per block is ~model-independent. The curves
+  converge as the model grows — the trend, not just one point, is the result.
+- **I was wrong twice about the bottleneck, and disproving each with data was the point.** Hypothesis
+  1 (per-block RPC latency) → built a BatchFetch RPC to collapse 48 round-trips into 1 → TTFT moved by
+  *noise*. That null result *is* evidence: on localhost the RTT was never the cost. Then a one-shot
+  profiler split the load: `batch_fetch 89 ms + deserialize/copy 135 ms = 225 ms` for 48 blocks =
+  4.7 ms/block vs recompute 3.4 ms/block. Both halves are Python-serialization + **unpinned** PCIe
+  copy (WSL2 forces `pin_memory=False`), not bandwidth — 28 MB should cross localhost in single-digit
+  ms. The async H2D copy hid behind the queue until I added a `torch.cuda.synchronize()` to measure it.
+- **The deck is stacked by the environment, not the algorithm:** unpinned memory, a Python hot path
+  serializing 28 MB, and a KV cache throttled to 0.09 GiB because 3B weights ate 5.8/8 GB.
+**Why it matters / what I'd redo:** A measured, fully-decomposed *negative* result (two hypotheses
+falsified, the cost named to the millisecond) is a stronger artifact than a cherry-picked positive
+one — and it correctly motivates the distributed/cloud run with pinned memory + zero-copy transport.
+I'd reach for the profiler *before* building BatchFetch next time: measure the split, then optimize
+the dominant term. (BatchFetch is still a keeper — one round-trip for a multi-block load is right.)
+**Links:** ADR 0031, `docs/benchmarks/phase1-ttft.md`, `connector/.../blockio.py` + `connector.py`
+(`_load_plan`, `KVC_LOAD_PROFILE`), `proto/.../kvcache.proto` (BatchFetch), `internal/server/server.go`.
+
+---
+
 ## Phase 5 - The differentiator: cost-aware + fair eviction
 
 ### 2026-06-07 - 5b: the work-conserving floor + the fairness knob (and a knob that saturates)

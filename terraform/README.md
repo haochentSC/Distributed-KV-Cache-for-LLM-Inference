@@ -59,6 +59,29 @@ terraform apply                            # review the plan, then confirm
 - cold tier: run with a low `-max-bytes` to force eviction, then `aws s3 ls s3://<cold_bucket>/blocks/ --recursive`
   → objects appear; a later Fetch for an evicted block is a recovered cold hit (0 violations).
 
+## Operational notes (learned from the first live apply, 2026-06-06)
+
+- **Image push *follows* the cluster apply.** The ECR repo is created by `apply`, so cache nodes
+  boot before any image exists. User-data's `docker pull` is non-fatal and `cache-server.service`
+  retries until you run `push-image.sh` — so a fresh cluster has etcd healthy but cache containers
+  retrying until the push lands. That's expected, not a failure.
+- **Drive `loadgen` from an etcd node or a bastion, never from a cache node.** loadgen would compete
+  with the cache-server for the same 2 vCPUs. It still must run *inside the VPC* (nodes advertise
+  private IPs). And keep the run gentle on small instances (low `-concurrency`, smaller
+  `-payload-bytes`).
+- **Instance sizing — `t3.small` is borderline.** `t3.*` are burstable; under a real load test the
+  CPU-credit balance hits 0 and AWS throttles the node to ~0.2 vCPU, which starves the 10s etcd lease
+  keepalive and **drops the node from the ring** (empty `/kvcache/members/`) — and even blocks SSH.
+  The Terraform now sets `cpu_credits = "unlimited"` on cache nodes to avoid this. For sustained
+  benchmark/chaos load, set `cache_instance_type` to a **non-burstable** type (e.g. `c7i.large`);
+  also note `t3.small`'s 2 GiB RAM is tight against the 1.5 GB `cache_max_bytes` default.
+- **`etcdctl endpoint health --cluster` shows 2/3 unhealthy — that's the SG, not a real fault.** The
+  etcd SG allows client port 2379 only from cache nodes + operator; peers use 2380. Confirm quorum
+  with a `put`/`get` (which needs quorum) instead.
+- **Windows/PowerShell:** quote the backend arg (`terraform init "-backend-config=backend.hcl"`) or
+  PowerShell splits on `=`; winget-installed `terraform`/`aws` need a new shell (or a registry PATH
+  refresh) to resolve; `ssh -F NUL` bypasses a `~/.ssh/config` with bad perms.
+
 ## Teardown
 
 ```

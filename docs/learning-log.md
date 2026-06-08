@@ -18,6 +18,56 @@
 
 ## Phase 4 - Eviction, observability & chaos
 
+### 2026-06-06 - First AWS apply: the cluster goes live, and t3 burst credits bite
+**Phase:** 4 (Sub-stage E — first `terraform apply` against a real account)
+**What I was doing:** Ran the authored Terraform end-to-end for the first time, stage by stage with a
+verify gate at each step: Stage 0 toolchain/identity/budget, Stage 1 `bootstrap` (S3 state + DynamoDB
+lock), Stage 2-4 `cluster` (VPC, 3-node etcd, 3 Spot cache nodes, ECR, S3 cold tier, IAM, CloudWatch).
+Built + pushed the image, then drove a `loadgen -verify` run inside the VPC.
+**What I learned / what broke:**
+- **`templatefile()` parses the WHOLE file, comments included.** A literal `${...}` inside a bash
+  comment in `cache.sh.tftpl` was read as a Terraform interpolation and failed `validate` (`...` is
+  not a valid expression). Lesson: in a `.tftpl`, even comment text must escape `$${...}` or avoid the
+  token. Caught at `validate`, before any apply.
+- **The image push necessarily races first boot — so user-data must not die on it.** The ECR repo only
+  exists *after* the cluster apply, so a fresh cache node always boots before the image is pushable.
+  The original user-data ran `docker pull` under `set -euo pipefail`, so the missing image **aborted
+  user-data before the systemd unit was even written** — the node then couldn't self-heal at all
+  (no unit to retry). Fix: make the boot pull non-fatal and let `cache-server.service`
+  (`Restart=always`) retry `docker run` until the image lands; add `user_data_replace_on_change` so a
+  template fix actually recreates the node.
+- **`t3.*` burst credits are a correctness hazard, not just a perf one.** Driving `loadgen` *on* a
+  cache node depleted its CPU-credit balance to 0; AWS then throttled the box to its ~0.2 vCPU
+  baseline. At baseline the cache-server couldn't reliably send its 10s etcd **lease keepalive**, so
+  every node's lease lapsed and `/kvcache/members/` went **empty** — and `sshd` couldn't even complete
+  a banner exchange. A throughput problem cascaded into a membership/availability outage. Fix:
+  `credit_specification { cpu_credits = "unlimited" }` on the cache nodes (set live via
+  `modify-instance-credit-specification` to recover the running fleet, then committed to Terraform).
+  For sustained benchmark/chaos load a **non-burstable** type (`c7i.large`) is the right substrate;
+  `t3.small`'s 2 GiB RAM is also tight against the 1.5 GB `cache_max_bytes` default.
+- **Never run the load generator on a shard.** loadgen competes with the cache-server it's hammering
+  for the same 2 vCPUs. Run it from an etcd node or a bastion (still inside the VPC, since nodes
+  advertise private IPs). After moving it to an etcd node with a gentle payload, the verify run was
+  clean: **6,596 req, 0 errors, 0 violations**, and reproduced the ADR 0014 ~87% hot-shard
+  concentration *on AWS* — matching the local number exactly.
+- **The locked-down etcd SG makes `etcdctl endpoint health --cluster` lie.** It probes each node's
+  *client* port (2379) cross-node, but the SG only allows 2379 from cache nodes + operator; etcd peers
+  talk on 2380. So 2/3 endpoints show "unhealthy" while quorum is actually fine — confirm with a
+  `put`/`get` (needs quorum) instead.
+- **Windows/PowerShell friction:** `terraform init -backend-config=backend.hcl` needs the arg quoted
+  (`"-backend-config=..."`) or PowerShell splits on `=`; `$(cat <<'EOF')` heredocs don't exist (use
+  `git commit -F file`); `~/.ssh/config` with bad perms blocks ssh (use `-F NUL`); winget-installed
+  tools need a PATH refresh from the registry in already-open shells; `stash@{0}` needs quoting.
+**Why it matters / what I'd redo:** Two of these (the boot-pull race and the credit throttle) are the
+kind of bug you only find by actually applying to a real account — `validate`/`plan` can't surface
+them. I'd default cache nodes to a small non-burstable type for any run that drives real load, and
+always drive load from a non-shard node. **Open question for next session:** does a cache-server
+re-register on its own after an etcd lease *lapses* (vs needing a process restart)? Recovery here took
+an instance reboot, but that was confounded by the credit throttle — isolate it under Sub-stage C
+failover testing.
+**Links:** ADR 0028 (First-apply findings), commit `fix(terraform): unblock first AWS apply...`,
+`terraform/cluster/{cache.tf,s3.tf,userdata/cache.sh.tftpl}`, `terraform/README.md`.
+
 ### 2026-06-06 - Real workloads: replaying ShareGPT instead of synthetic traffic
 **Phase:** 4 (making the benchmark practical, not theoretical)
 **What I was doing:** Added a `-trace` mode to `loadgen` that replays a real multi-turn chat

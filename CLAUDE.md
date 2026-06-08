@@ -6,11 +6,16 @@ cost-aware + fair eviction), integrated with vLLM and deployed on AWS via Terraf
 
 **Source of truth:** [`docs/00-project-plan.md`](docs/00-project-plan.md) — strategy, phases,
 decisions log. Don't duplicate it here. Decisions are recorded as ADRs in `docs/adr/`.
-**Current phase: Phase 4 (eviction, observability, chaos — local-first, then AWS).**
+**Current phase: Phase 4 (eviction, observability, chaos).**
 Phases 1–3 are done: the CPU-only core (server, store, block-hash, load generator, Python connector
 libs), the consistent-hash ring + client routing, and etcd-coordinated RF=2 async replication with
-implicit promotion and graceful/Spot drain (ADRs 0021–0023). vLLM tensor-copy hooks + the TTFT exit
-gate remain deferred to Phase 4.5 (GPU path).
+implicit promotion and graceful/Spot drain (ADRs 0021–0023). The **AWS cluster is live + verified**
+(Sub-stage E, ADR 0028): first `terraform apply` succeeded 2026-06-06 — 3-node etcd quorum, 3 Spot
+cache nodes, ECR, S3 cold tier, IAM, CloudWatch; `loadgen -verify` on AWS = 0 violations. **Pending
+on AWS:** cold-tier round-trip verify, AWS chaos (`aws-chaos.sh`, `tc`/`iptables`), CloudWatch alarm
+wiring. vLLM tensor-copy hooks + the TTFT exit gate remain deferred to Phase 4.5 (GPU path).
+Eviction policy (Phase 5 GDSF/DRF) is the next headline. **Remember to `terraform destroy` the AWS
+cluster when not actively testing — it bills hourly.**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->
@@ -84,6 +89,8 @@ Phase 1 on — update this section as they appear.
 ## Git workflow
 
 - **Conventional Commits** (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`).
+- **No AI co-authorship.** Never add `Co-Authored-By` / AI-attribution trailers (Claude, Cursor,
+  etc.) to commit messages. Commits are authored by HC.
 - Small, reviewable commits over big batches. Branch off `main` for non-trivial work.
 - Update docs + ADRs **in the same change** as the code — they're part of "done".
 - Close the loop: run build/tests/linter yourself and report results before calling a task done.

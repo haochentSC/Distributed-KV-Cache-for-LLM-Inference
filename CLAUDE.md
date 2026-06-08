@@ -6,16 +6,25 @@ cost-aware + fair eviction), integrated with vLLM and deployed on AWS via Terraf
 
 **Source of truth:** [`docs/00-project-plan.md`](docs/00-project-plan.md) — strategy, phases,
 decisions log. Don't duplicate it here. Decisions are recorded as ADRs in `docs/adr/`.
-**Current phase: Phase 4 (eviction, observability, chaos).**
-Phases 1–3 are done: the CPU-only core (server, store, block-hash, load generator, Python connector
-libs), the consistent-hash ring + client routing, and etcd-coordinated RF=2 async replication with
-implicit promotion and graceful/Spot drain (ADRs 0021–0023). The **AWS cluster is live + verified**
+**Current phase: Phase 5 (the differentiator — cost-aware + fair eviction).**
+Phases 1–4 are done: the CPU-only core (server, store, block-hash, load generator, Python connector
+libs), the consistent-hash ring + client routing, etcd-coordinated RF=2 async replication with
+implicit promotion and graceful/Spot drain (ADRs 0021–0023), and the Phase 4 LRU+watermark eviction,
+Prometheus, and process-kill chaos harness (ADRs 0024–0026). The **AWS cluster went live + verified**
 (Sub-stage E, ADR 0028): first `terraform apply` succeeded 2026-06-06 — 3-node etcd quorum, 3 Spot
-cache nodes, ECR, S3 cold tier, IAM, CloudWatch; `loadgen -verify` on AWS = 0 violations. **Pending
-on AWS:** cold-tier round-trip verify, AWS chaos (`aws-chaos.sh`, `tc`/`iptables`), CloudWatch alarm
-wiring. vLLM tensor-copy hooks + the TTFT exit gate remain deferred to Phase 4.5 (GPU path).
-Eviction policy (Phase 5 GDSF/DRF) is the next headline. **Remember to `terraform destroy` the AWS
-cluster when not actively testing — it bills hourly.**
+cache nodes, ECR, S3 cold tier, IAM, CloudWatch; `loadgen -verify` on AWS = 0 violations.
+**Phase 5 COMPLETE (local, the differentiator).** 5a (ADR 0029): GDSF cost-aware eviction
+(`H = L + freq·cost/size`) + static per-tenant quotas behind the Phase 4 seam; `-eviction gdsf` /
+`-tenant-quota`, loadgen `-multitenant` (`docs/benchmarks/phase5a-eviction.md`). 5b (2026-06-07,
+ADR 0030): elastic work-conserving floors + the `fairness_weight ∈ [0,1]` knob
+(`-eviction gdsf-elastic -fairness-weight w`, `H_eff = H/(1+w·overage)`, `OverQuota()`=false =
+watermark-only). Swept the efficiency-vs-fairness Pareto frontier (`scripts/phase5b-sweep.ps1`,
+`docs/benchmarks/phase5b-eviction.md`): `w=0` efficiency corner (20.0%/1.9% min), `w≥0.25` fairness
+plateau (~14%/~12% min); **elastic Pareto-dominates the 5a static caps**; the knob saturates fast.
+**Deferred AWS batch:** cold-tier round-trip verify, AWS chaos (`aws-chaos.sh`, `tc`/`iptables`),
+CloudWatch alarm wiring, and re-running the 5a/5b benchmarks on the 3-node cluster — all in one paid
+window. vLLM tensor-copy hooks + the TTFT exit gate remain deferred to Phase 4.5 (GPU path).
+**Remember to `terraform destroy` the AWS cluster when not actively testing — it bills hourly.**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->

@@ -84,7 +84,11 @@ Defined in [`proto/kvcache/v1/kvcache.proto`](../proto/kvcache/v1/kvcache.proto)
 - **`Entry`** holds tensor bytes + metadata (`token_ids`, size, timestamps, version, and the
   Phase 5 fields `tenant_id`/`recompute_cost`/`access_count`).
 - **`EvictionPolicy` interface** is the swappable seam mandated by the plan: Phase 1 = `NoopPolicy`;
-  Phase 4 = LRU+TTL; Phase 5 = GDSF + fairness — no change to `Store` or the API.
+  Phase 4 = LRU+watermark; Phase 5 = GDSF cost-aware + per-tenant fairness — `gdsf` (static caps,
+  [ADR 0029](./adr/0029-gdsf-cost-aware-and-static-quota-eviction.md)) and `gdsf-elastic`
+  (work-conserving floors + the `fairness_weight` knob,
+  [ADR 0030](./adr/0030-elastic-work-conserving-fairness-knob.md)) — all behind the optional
+  `QuotaPolicy` capability, no change to `Store` or the API.
 - **Hit verification (the correctness-invariant guard, [ADR 0016](./adr/0016-cache-correctness-invariant.md)):**
   on `Fetch`, compare stored `token_ids`/`model_id` and treat a mismatch as a miss. This upholds the
   invariant *never serve KV that mismatches the requested `(block_hash, model_id, token_ids)`* —

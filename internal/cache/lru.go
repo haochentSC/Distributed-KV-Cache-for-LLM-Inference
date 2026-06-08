@@ -52,12 +52,11 @@ func (p *LRUPolicy) RecordAccess(h BlockHash) {
 	}
 }
 
-// RecordWrite inserts h (or moves it to front on overwrite) as most-recently-used. size is
-// ignored by LRU (the Store tracks bytes); it's in the interface for the cost-aware policy later.
-func (p *LRUPolicy) RecordWrite(h BlockHash, size int64) {
-	// TODO(hc): lock p.mu.
-	//   if e := p.items[h] exists -> MoveToFront(e)
-	//   else -> e := p.ll.PushFront(&lruItem{key: h}); p.items[h] = e
+// RecordWrite inserts the block (or moves it to front on overwrite) as most-recently-used. LRU
+// reads only meta.Key — size/cost/tenant are ignored (the Store tracks bytes); they're in
+// WriteMeta for the cost-aware policy (GDSF).
+func (p *LRUPolicy) RecordWrite(meta WriteMeta) {
+	h := meta.Key
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if e, ok := p.items[h]; ok {

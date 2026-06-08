@@ -54,10 +54,12 @@ func (e *Evictor) Run(ctx context.Context) {
 			return
 
 		case <-e.store.EvictSignal():
-			// PRESSURE drain: a write crossed the high-water mark. Free down to the low-water
-			// mark — the hi/lo gap is the hysteresis that stops evict-one/write-one thrashing.
+			// PRESSURE drain: a write crossed the high-water mark, or a tenant went over its quota
+			// (Phase 5a). Free until neither holds — for the global watermark that means down to the
+			// low-water mark (the hi/lo gap is the hysteresis that stops evict-one/write-one
+			// thrashing); for quotas it means until no tenant is over its floor.
 			n := 0
-			for e.store.Bytes() > e.store.LowWater() {
+			for e.store.needsEviction() {
 				if _, ok := e.store.evictOne(); !ok {
 					break // policy ran dry (empty / all pinned); break or we spin this goroutine hot
 				}

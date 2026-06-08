@@ -69,6 +69,7 @@ func main() {
 	model := flag.String("model", "tinyllama-1.1b", "model id")
 	seed := flag.Int64("seed", 1, "RNG seed (logged for reproducibility)")
 	trace := flag.String("trace", "", "replay a real-workload trace (JSONL from scripts/prep_sharegpt.py) instead of synthetic traffic; ignores prefix/tail flags")
+	multitenant := flag.Bool("multitenant", false, "drive 3 tenants with distinct profiles (cheap/frequent, expensive/rare, bursty) to exercise the Phase 5 GDSF + per-tenant-quota policy; reports per-tenant hit rate")
 	flag.Parse()
 
 	log.Printf("loadgen payload=%dB block=%dtok prefix-share=%.2f conc=%d req/cli=%d dur=%s verify=%v prefix=%dblk tail=%dblk seed=%d",
@@ -117,6 +118,18 @@ func main() {
 		hotPrefix:    hotPrefix,
 		verify:       *verify,
 		live:         live,
+	}
+
+	// Multi-tenant mode (Phase 5): three tenants with deliberately different shapes so per-tenant
+	// starvation is visible and the GDSF + quota policy has something to arbitrate (plan §3.5).
+	// recompute cost is set ∝ prefix length (a prefill-FLOPs proxy), so B's long prefixes are the
+	// high-value blocks a pure cost-aware policy hoards — exactly what a quota must rein in. Each
+	// tenant has its OWN hot prefix (distinct block hashes) so their cache footprints don't overlap
+	// and per-tenant accounting is clean.
+	if *multitenant {
+		w.tenants = buildTenants(rand.New(rand.NewSource(*seed)), *blockTokens)
+		w.start = time.Now()
+		log.Printf("loadgen multitenant: %d tenants (set per-tenant quotas on the server via -tenant-quota)", len(w.tenants))
 	}
 
 	// Trace mode: replay a real multi-turn workload (ShareGPT etc.) instead of synthesizing.
@@ -248,22 +261,83 @@ type workload struct {
 	// nil trace => synthetic mode (buildTokens).
 	trace       []traceRecord
 	traceCursor *atomic.Int64
+
+	// Multi-tenant mode (set only with -multitenant): the tenant profiles to draw from, and the
+	// run start used to gate bursty tenants' active windows. nil tenants => single-tenant mode.
+	tenants []tenantProfile
+	start   time.Time
+}
+
+// tenantProfile is one synthetic tenant's traffic shape. weight is its share of requests; cost is
+// the recompute cost stamped on each of its written blocks (∝ prefix length, a prefill-FLOPs
+// proxy); a bursty tenant only fires during periodic active windows so its load arrives in spikes.
+//
+// hotPool is a SET of distinct reusable prefixes (not one): a request reuses a random member with
+// probability prefixShare. The pool size is what makes the policy matter — when the UNION of all
+// tenants' pools exceeds the cache, the cache can't hold every tenant's hot set, so it must choose
+// WHOSE reusable blocks to keep. That choice is where cost-awareness starves the cheap tenant and a
+// quota rescues it. (With a single hot prefix per tenant the hot set always fits and hit rate is
+// profile-determined, not policy-determined — the policy would look identical to LRU.)
+type tenantProfile struct {
+	id           string
+	weight       float64
+	hotPool      [][]int32
+	prefixBlocks int
+	prefixShare  float64
+	cost         float64
+	bursty       bool
+}
+
+// buildTenants constructs the three canonical Phase 5 profiles (plan §3.5):
+//   - A: cheap, short, frequent — a big pool of small prefixes; the tenant cost-aware GDSF starves.
+//   - B: expensive, long, rare — fewer but long (high-cost) prefixes GDSF hoards without a quota.
+//   - C: bursty — moderate cost, traffic in spikes (tests behaviour under uneven contention).
+//
+// Pool sizes are chosen so the union of reusable blocks (~470 at 64 KiB ≈ 29 MiB) oversubscribes a
+// 16 MiB cache, forcing real contention on hot blocks. cost = prefix token count. Each prefix is
+// distinct random tokens, so tenants' footprints don't overlap and per-tenant accounting is clean.
+func buildTenants(rng *rand.Rand, blockTokens int) []tenantProfile {
+	mk := func(id string, weight float64, prefixBlocks, poolSize int, share float64, bursty bool) tenantProfile {
+		pool := make([][]int32, poolSize)
+		for i := range pool {
+			pool[i] = randomTokens(rng, prefixBlocks*blockTokens)
+		}
+		return tenantProfile{
+			id:           id,
+			weight:       weight,
+			hotPool:      pool,
+			prefixBlocks: prefixBlocks,
+			prefixShare:  share,
+			cost:         float64(prefixBlocks * blockTokens), // prefill-FLOPs proxy
+			bursty:       bursty,
+		}
+	}
+	return []tenantProfile{
+		mk("A", 0.55, 2, 40, 0.95, false),  // cheap/short/frequent: 40×2 = 80 hot blocks
+		mk("B", 0.30, 16, 20, 0.80, false), // expensive/long/rare:  20×16 = 320 hot blocks
+		mk("C", 0.15, 6, 12, 0.70, true),   // bursty:                12×6 = 72 hot blocks
+	}
 }
 
 type result struct {
 	requests   int
-	blocks     int            // total blocks looked up
-	hits       int            // blocks served from cache (Fetched)
-	writes     int            // blocks written on a miss
-	errors     int            // RPC errors mid-request (degrade-to-miss)
-	degraded   int            // requests with no reachable owner (routed to a miss)
-	violations int            // Fetched bytes that did NOT match payload=f(hash) — must be 0 (ADR 0016)
-	perShard   map[string]int // requests routed to each shard (hot-shard measurement)
+	blocks     int                      // total blocks looked up
+	hits       int                      // blocks served from cache (Fetched)
+	writes     int                      // blocks written on a miss
+	errors     int                      // RPC errors mid-request (degrade-to-miss)
+	degraded   int                      // requests with no reachable owner (routed to a miss)
+	violations int                      // Fetched bytes that did NOT match payload=f(hash) — must be 0 (ADR 0016)
+	perShard   map[string]int           // requests routed to each shard (hot-shard measurement)
+	perTenant  map[string]*tenantCounts // per-tenant blocks/hits (multitenant mode; the fairness signal)
 	latencies  []time.Duration
 }
 
+// tenantCounts accumulates one tenant's block/hit/write totals so report can show per-tenant hit
+// rate — the number that reveals whether a quota kept a cheap tenant from being starved.
+type tenantCounts struct{ blocks, hits, writes, requests int }
+
 func (w workload) run(rng *rand.Rand, n int, deadline time.Time) result {
-	res := result{latencies: make([]time.Duration, 0, n), perShard: make(map[string]int)}
+	res := result{latencies: make([]time.Duration, 0, n), perShard: make(map[string]int), perTenant: make(map[string]*tenantCounts)}
 	payload := make([]byte, w.payloadBytes) // reused per worker; contents irrelevant unless -verify
 	var expected []byte
 	if w.verify {
@@ -282,9 +356,24 @@ func (w workload) run(rng *rand.Rand, n int, deadline time.Time) result {
 		} else if w.trace == nil && i >= n {
 			break
 		}
-		tokens, ok := w.nextTokens(rng, deadline)
+		// Pick the request's tenant + tokens. Multitenant mode draws a tenant by weight (bursty
+		// tenants only during their active window) and builds tokens from that tenant's profile;
+		// otherwise the existing synthetic/trace path runs with no tenant.
+		var tp *tenantProfile
+		var tokens []int32
+		ok := true
+		if w.tenants != nil {
+			tp = w.pickTenant(rng)
+			tokens = w.buildTenantTokens(rng, tp)
+		} else {
+			tokens, ok = w.nextTokens(rng, deadline)
+		}
 		if !ok {
 			break // trace exhausted (count mode)
+		}
+		tenantID, cost := "", 0.0
+		if tp != nil {
+			tenantID, cost = tp.id, tp.cost
 		}
 		blocks := blockhash.ChainBlocks(w.model, tokens, w.blockTokens)
 		if len(blocks) == 0 {
@@ -308,9 +397,23 @@ func (w workload) run(rng *rand.Rand, n int, deadline time.Time) result {
 		res.perShard[owner]++
 
 		t0 := time.Now()
-		err := w.oneRequestWithFailover(context.Background(), conns, blocks, payload, expected, root, &res)
+		preHits, preWrites := res.hits, res.writes
+		err := w.oneRequestWithFailover(context.Background(), conns, blocks, payload, expected, root, tenantID, cost, &res)
 		res.latencies = append(res.latencies, time.Since(t0))
 		res.blocks += len(blocks)
+		if tp != nil {
+			// Attribute this request's block/hit/write deltas to its tenant — the per-tenant hit
+			// rate is the fairness signal the benchmark reads.
+			tc := res.perTenant[tenantID]
+			if tc == nil {
+				tc = &tenantCounts{}
+				res.perTenant[tenantID] = tc
+			}
+			tc.requests++
+			tc.blocks += len(blocks)
+			tc.hits += res.hits - preHits
+			tc.writes += res.writes - preWrites
+		}
 		if w.live != nil {
 			w.live.requests.Add(1)
 		}
@@ -356,6 +459,51 @@ func (w workload) buildTokens(rng *rand.Rand) []int32 {
 	return tokens
 }
 
+// pickTenant draws a tenant by weight. A bursty tenant is excluded outside its active window, so
+// its traffic arrives in spikes (the rest of the time only the steady tenants compete).
+func (w workload) pickTenant(rng *rand.Rand) *tenantProfile {
+	active := w.burstActive()
+	sum := 0.0
+	for i := range w.tenants {
+		if w.tenants[i].bursty && !active {
+			continue
+		}
+		sum += w.tenants[i].weight
+	}
+	r := rng.Float64() * sum
+	for i := range w.tenants {
+		if w.tenants[i].bursty && !active {
+			continue
+		}
+		if r -= w.tenants[i].weight; r <= 0 {
+			return &w.tenants[i]
+		}
+	}
+	return &w.tenants[0] // unreached (steady tenants always carry weight)
+}
+
+// burstActive gates bursty tenants: on for 2s of every 6s wall-clock window since start. Cheap,
+// deterministic, and enough to make spike-vs-quiet contention visible in the per-tenant numbers.
+func (w workload) burstActive() bool {
+	return time.Since(w.start)%(6*time.Second) < 2*time.Second
+}
+
+// buildTenantTokens builds a request's tokens from a tenant's profile: with probability prefixShare
+// it reuses a RANDOM member of the tenant's hot pool (the reuse the cache can serve), else a fresh
+// random prefix (a guaranteed miss), plus a unique tail.
+func (w workload) buildTenantTokens(rng *rand.Rand, tp *tenantProfile) []int32 {
+	var prefix []int32
+	if len(tp.hotPool) > 0 && rng.Float64() < tp.prefixShare {
+		prefix = tp.hotPool[rng.Intn(len(tp.hotPool))]
+	} else {
+		prefix = randomTokens(rng, tp.prefixBlocks*w.blockTokens)
+	}
+	tokens := make([]int32, 0, len(prefix)+w.tailBlocks*w.blockTokens)
+	tokens = append(tokens, prefix...)
+	tokens = append(tokens, randomTokens(rng, w.tailBlocks*w.blockTokens)...)
+	return tokens
+}
+
 // oneRequestWithFailover tries each owner (primary then replica) for the read side, and
 // always Writes to the primary (only the primary mints versions; ADR 0021 keeps replication
 // off the client path). A primary that is unreachable for Lookup/Fetch is treated as down —
@@ -363,7 +511,7 @@ func (w workload) buildTokens(rng *rand.Rand) []int32 {
 // elsewhere would corrupt placement (the dead primary will re-take ownership when it returns
 // and replication on the next write rebalances). If every owner errors we surface it as a
 // degrade-to-miss to the caller.
-func (w workload) oneRequestWithFailover(ctx context.Context, conns []*grpc.ClientConn, blocks []blockhash.Block, payload, expected []byte, root []byte, res *result) error {
+func (w workload) oneRequestWithFailover(ctx context.Context, conns []*grpc.ClientConn, blocks []blockhash.Block, payload, expected []byte, root []byte, tenant string, cost float64, res *result) error {
 	var lastErr error
 	for i, conn := range conns {
 		client := kvcachev1.NewKVCacheClient(conn)
@@ -371,7 +519,7 @@ func (w workload) oneRequestWithFailover(ctx context.Context, conns []*grpc.Clie
 		// Lookup+Fetch; if blocks aren't present on the replica, the run is short and the
 		// remaining misses just won't be written this round — the next request to the new
 		// primary (after the dead one is removed from the ring) will handle the writes.
-		err := w.oneRequest(ctx, client, blocks, payload, expected, res, i == 0, root)
+		err := w.oneRequest(ctx, client, blocks, payload, expected, res, i == 0, root, tenant, cost)
 		if err == nil {
 			return nil
 		}
@@ -383,7 +531,7 @@ func (w workload) oneRequestWithFailover(ctx context.Context, conns []*grpc.Clie
 	return lastErr
 }
 
-func (w workload) oneRequest(ctx context.Context, client kvcachev1.KVCacheClient, blocks []blockhash.Block, payload, expected []byte, res *result, allowWrites bool, root []byte) error {
+func (w workload) oneRequest(ctx context.Context, client kvcachev1.KVCacheClient, blocks []blockhash.Block, payload, expected []byte, res *result, allowWrites bool, root []byte, tenant string, cost float64) error {
 	bh := make([][]byte, len(blocks))
 	for i := range blocks {
 		bh[i] = blocks[i].Hash[:]
@@ -419,7 +567,7 @@ func (w workload) oneRequest(ctx context.Context, client kvcachev1.KVCacheClient
 		return nil
 	}
 	for i := run; i < len(blocks); i++ { // simulate prefill + store of the misses
-		if err := w.write(ctx, client, blocks[i], payload, root); err != nil {
+		if err := w.write(ctx, client, blocks[i], payload, root, tenant, cost); err != nil {
 			return err
 		}
 		res.writes++
@@ -471,7 +619,7 @@ func (w workload) fetch(ctx context.Context, client kvcachev1.KVCacheClient, b b
 	return true, nil
 }
 
-func (w workload) write(ctx context.Context, client kvcachev1.KVCacheClient, b blockhash.Block, payload []byte, root []byte) error {
+func (w workload) write(ctx context.Context, client kvcachev1.KVCacheClient, b blockhash.Block, payload []byte, root []byte, tenant string, cost float64) error {
 	if w.verify {
 		// Stamp this block's content as a deterministic function of its hash, so any reader can
 		// regenerate and verify it. Cheap and overwrites the shared per-worker buffer in place.
@@ -482,8 +630,9 @@ func (w workload) write(ctx context.Context, client kvcachev1.KVCacheClient, b b
 		return err
 	}
 	// routing_key = the prompt's root hash, so the primary's replicator places the replica
-	// where read-failover will later look for it (ADR 0021 placement-by-root).
-	hdr := &kvcachev1.WriteHeader{ModelId: w.model, BlockHash: b.Hash[:], TokenIds: b.TokenIDs, TotalSize: uint64(len(payload)), RoutingKey: root}
+	// where read-failover will later look for it (ADR 0021 placement-by-root). tenant_id +
+	// recompute_cost feed the Phase 5 GDSF + per-tenant-quota policy (empty/0 in single-tenant mode).
+	hdr := &kvcachev1.WriteHeader{ModelId: w.model, BlockHash: b.Hash[:], TokenIds: b.TokenIDs, TotalSize: uint64(len(payload)), RoutingKey: root, TenantId: tenant, RecomputeCost: cost}
 	if err := stream.Send(&kvcachev1.WriteChunk{Msg: &kvcachev1.WriteChunk_Header{Header: hdr}}); err != nil {
 		return err
 	}
@@ -574,6 +723,7 @@ func report(results []result, elapsed time.Duration) int {
 	var reqs, blocks, hits, writes, errs, degraded, violations int
 	var lats []time.Duration
 	perShard := map[string]int{}
+	perTenant := map[string]*tenantCounts{}
 	for _, r := range results {
 		reqs += r.requests
 		blocks += r.blocks
@@ -585,6 +735,17 @@ func report(results []result, elapsed time.Duration) int {
 		lats = append(lats, r.latencies...)
 		for node, c := range r.perShard {
 			perShard[node] += c
+		}
+		for id, tc := range r.perTenant {
+			agg := perTenant[id]
+			if agg == nil {
+				agg = &tenantCounts{}
+				perTenant[id] = agg
+			}
+			agg.requests += tc.requests
+			agg.blocks += tc.blocks
+			agg.hits += tc.hits
+			agg.writes += tc.writes
 		}
 	}
 	sort.Slice(lats, func(i, j int) bool { return lats[i] < lats[j] })
@@ -608,7 +769,31 @@ func report(results []result, elapsed time.Duration) int {
 		percentile(lats, 0.95).Round(time.Microsecond),
 		percentile(lats, 0.99).Round(time.Microsecond))
 	reportDistribution(perShard, reqs)
+	reportTenants(perTenant)
 	return violations
+}
+
+// reportTenants prints per-tenant hit rate — the fairness signal. Under a starving policy the
+// cheap/frequent tenant's hit rate collapses while the expensive tenant's stays high; a per-tenant
+// quota should lift the floor. Sorted by tenant id for stable diffs across runs.
+func reportTenants(perTenant map[string]*tenantCounts) {
+	if len(perTenant) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(perTenant))
+	for id := range perTenant {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	fmt.Println("per-tenant hit rate:")
+	for _, id := range ids {
+		tc := perTenant[id]
+		rate := 0.0
+		if tc.blocks > 0 {
+			rate = float64(tc.hits) / float64(tc.blocks) * 100
+		}
+		fmt.Printf("  %-4s reqs=%-7d blocks=%-8d hit-rate=%.1f%%\n", id, tc.requests, tc.blocks, rate)
+	}
 }
 
 // reportDistribution prints requests-per-shard, sorted, with each shard's share. This is

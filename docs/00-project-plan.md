@@ -371,6 +371,23 @@ routing — proven locally first, then deployed to AWS.
 
 This phase is split so a partial result still ships (see Section 3.5 scoping):
 
+> **Status (2026-06-07): 5a SHIPPED (local).** GDSF cost-aware value (`H = L + freq·cost/size`) +
+> static per-tenant quotas behind the Phase 4 seam (ADR 0029); `-eviction gdsf` / `-tenant-quota`;
+> loadgen `-multitenant` (3 tenants). Benchmarked LRU vs GDSF vs GDSF+quotas — the
+> efficiency-vs-fairness tension is visible (GDSF: 21.5% aggregate but starves the cheap tenant to
+> 3.1%; GDSF+quotas: cheap tenant 16.9%, min-tenant 3.1%→10.5%), 0 correctness violations
+> (`docs/benchmarks/phase5a-eviction.md`). Re-running 5a on the AWS cluster is batched with the
+> deferred Phase-4 AWS verification window.
+>
+> **Status (2026-06-07): 5b SHIPPED (local).** Elastic work-conserving floors + the
+> `fairness_weight ∈ [0,1]` knob (ADR 0030); `-eviction gdsf-elastic -fairness-weight w`. Quotas
+> become floors: `OverQuota()` returns false (watermark-only eviction = work-conserving), and
+> victim selection uses `H_eff = H/(1 + w·overage)`. Swept (`scripts/phase5b-sweep.ps1`, 3-seed
+> mean): the Pareto frontier is drawn — `w=0` = efficiency corner (20.0% overall / 1.9% min-tenant),
+> `w≥0.25` = fairness plateau (~14% / ~12% min). **Elastic Pareto-dominates the 5a static caps on
+> both axes** (w=0.25: 14.4%/12.3% vs static 12.2%/10.3%); the knob saturates fast (honest finding).
+> 0 violations (`docs/benchmarks/phase5b-eviction.md`). **Phase 5 (the differentiator) is complete.**
+
 **5a — Cost-aware + static fairness (must-ship, ~weeks 17–18):**
 - Extend the cache data model with `tenant_id`, `recompute_cost`, `access_count` (already in the Section 3 entry schema)
 - Implement the GDSF-style value function behind the eviction-policy interface from Phase 4

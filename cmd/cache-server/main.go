@@ -6,11 +6,13 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -39,6 +41,31 @@ func (a coldAdapter) Get(ctx context.Context, model string, h cache.BlockHash) (
 // compute different rings and disagree on placement. 128 is the calibrated value (ADR 0014).
 const ringVnodes = 128
 
+// parseTenantQuotas parses the -tenant-quota flag ("A=100000000,B=50000000") into a
+// tenant->bytes map for cache.NewGDSF. An empty string yields a nil map (no quotas = pure
+// cost-aware GDSF). Each entry must be tenant=positive-int; anything else is an error so an
+// operator typo fails fast rather than silently disabling a tenant's floor.
+func parseTenantQuotas(s string) (map[string]int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	out := make(map[string]int64)
+	for _, pair := range strings.Split(s, ",") {
+		k, v, ok := strings.Cut(strings.TrimSpace(pair), "=")
+		k = strings.TrimSpace(k)
+		if !ok || k == "" {
+			return nil, fmt.Errorf("bad entry %q: want tenant=bytes", pair)
+		}
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		if err != nil || n <= 0 {
+			return nil, fmt.Errorf("bad quota for %q: want a positive integer, got %q", k, v)
+		}
+		out[k] = n
+	}
+	return out, nil
+}
+
 func main() {
 	addr := flag.String("addr", ":50051", "gRPC listen address")
 	advertise := flag.String("advertise", "", "address clients use to reach this node (host:port); defaults to -addr")
@@ -52,6 +79,9 @@ func main() {
 	loWater := flag.Float64("lo-water", 0.75, "low-water fraction of -max-bytes the evictor frees down to")
 	ttl := flag.Duration("ttl", 0, "idle TTL: evict blocks not read within this window; 0 disables the TTL sweep")
 	evictSweep := flag.Duration("evict-sweep", 30*time.Second, "how often the TTL sweep runs")
+	eviction := flag.String("eviction", "lru", "eviction policy: lru (Phase 4 baseline) | gdsf (Phase 5a cost-aware + static per-tenant caps) | gdsf-elastic (Phase 5b work-conserving floors + fairness knob, ADR 0007)")
+	tenantQuota := flag.String("tenant-quota", "", "per-tenant byte budget for gdsf/gdsf-elastic, e.g. \"A=100000000,B=50000000\"; a hard cap under gdsf, an elastic floor under gdsf-elastic; tenants omitted are unlimited")
+	fairnessWeight := flag.Float64("fairness-weight", 0, "gdsf-elastic only: max-min fairness bias in [0,1]; 0 = pure GDSF efficiency, 1 = strong fairness (ADR 0030)")
 	metricsAddr := flag.String("metrics-addr", ":9090", "address for the Prometheus /metrics endpoint; empty disables it")
 	coldBucket := flag.String("cold-bucket", "", "S3 bucket for the cold tier (spill-on-evict + Fetch read-through, ADR 0027); empty = disabled. Region/creds come from the instance role / AWS_REGION")
 	flag.Parse()
@@ -92,11 +122,35 @@ func main() {
 		log.Printf("cold tier enabled: s3://%s (spill-on-evict + Fetch read-through)", *coldBucket)
 	}
 
-	// Phase 4: an LRU-backed, optionally bounded Store. With -max-bytes unset it stays
-	// unbounded (NoopPolicy-equivalent behaviour). The LRU is the baseline policy Phase 5's
-	// cost-aware/fairness engine will be measured against — swapped here, nowhere else. When a
-	// cold tier is configured, entries evicted under pressure/TTL are demoted to it (ADR 0027)
-	// instead of being lost; the SpillFunc just adapts cache.BlockHash to the tier's [32]byte.
+	// The eviction policy is swapped HERE and nowhere else (the Phase 4 seam). LRU is the Phase 4
+	// baseline; GDSF is the Phase 5 cost-aware + per-tenant-quota engine measured against it
+	// (ADR 0007). The Store, gRPC API, and evictor are policy-agnostic — only this line changes.
+	var policy cache.EvictionPolicy
+	switch *eviction {
+	case "lru":
+		policy = cache.NewLRU()
+	case "gdsf":
+		quotas, err := parseTenantQuotas(*tenantQuota)
+		if err != nil {
+			log.Fatalf("invalid -tenant-quota: %v", err)
+		}
+		policy = cache.NewGDSF(quotas)
+		log.Printf("eviction: gdsf (cost-aware) with %d static tenant cap(s)", len(quotas))
+	case "gdsf-elastic":
+		quotas, err := parseTenantQuotas(*tenantQuota)
+		if err != nil {
+			log.Fatalf("invalid -tenant-quota: %v", err)
+		}
+		policy = cache.NewGDSFElastic(quotas, *fairnessWeight)
+		log.Printf("eviction: gdsf-elastic (work-conserving) with %d tenant floor(s), fairness-weight=%.2f", len(quotas), *fairnessWeight)
+	default:
+		log.Fatalf("invalid -eviction %q: want lru, gdsf, or gdsf-elastic", *eviction)
+	}
+
+	// Phase 4: an optionally bounded Store. With -max-bytes unset it stays unbounded
+	// (NoopPolicy-equivalent behaviour). When a cold tier is configured, entries evicted under
+	// pressure/TTL are demoted to it (ADR 0027) instead of being lost; the SpillFunc just adapts
+	// cache.BlockHash to the tier's [32]byte.
 	storeOpts := []cache.StoreOption{
 		cache.WithMaxBytes(*maxBytes),
 		cache.WithWatermarks(*hiWater, *loWater),
@@ -107,7 +161,7 @@ func main() {
 				cold.Spill(model, [32]byte(h), version, tokenIDs, kv)
 			}))
 	}
-	store := cache.NewStore(cache.NewLRU(), storeOpts...)
+	store := cache.NewStore(policy, storeOpts...)
 
 	// Process-wide Prometheus instrumentation (ADR 0025). One *Metrics owns a private registry;
 	// it feeds the gRPC interceptors, the evictor's reason counter, the server/replicator event

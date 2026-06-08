@@ -53,10 +53,17 @@ If HC is stuck, Claude gives a hint or leading question before the answer.
       LookupN[1] makes promotion implicit (see ADR 0022). **Remaining for the Phase 3 box-check:**
       WSL2 `-race` pass on cluster/coord/server/spot; multi-node chaos test (kill + verify served
       from replica); IAM + S3 cold tier (deferred — slot belongs with Phase 4 AWS work).
-- [ ] **Phase 4 - Eviction, observability, chaos:** LRU+TTL eviction, memory-pressure eviction,
-      Prometheus/Grafana + CloudWatch, chaos harness, benchmark report.
+- [x] **Phase 4 - Eviction, observability, chaos:** LRU+watermark eviction (ADR 0024), Prometheus
+      metrics (ADR 0025), process-kill chaos harness (ADR 0026), S3 cold tier (ADR 0027), and the
+      AWS cluster live + verified (ADR 0028, first `terraform apply` 2026-06-06). **Deferred AWS
+      batch (one paid window):** cold-tier round-trip verify, AWS chaos (`tc`/`iptables`), CloudWatch
+      alarm wiring, and re-running the Phase-5 benchmarks on the 3-node cluster.
 - [ ] **Phase 4.5 - GPU benchmark:** real vLLM + GPU TTFT number, then destroy GPU resources.
-- [ ] **Phase 5 - Differentiator:** cost-aware + fairness eviction.
+- [x] **Phase 5 - Differentiator: cost-aware + fairness eviction (complete, local, 2026-06-07).**
+      5a (ADR 0029): GDSF cost-aware value `H = L + freq·cost/size` + static per-tenant caps. 5b
+      (ADR 0030): elastic work-conserving floors + the `fairness_weight ∈ [0,1]` knob
+      (`H_eff = H/(1+w·overage)`), swept into the efficiency-vs-fairness Pareto frontier —
+      elastic Pareto-dominates the static caps (`docs/benchmarks/phase5{a,b}-eviction.md`).
 - [ ] **Phase 6 - Polish & story:** README + prior-art, demo video, blog post, resume bullets.
 
 ## Git Workflow

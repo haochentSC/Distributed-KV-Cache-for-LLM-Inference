@@ -15,9 +15,9 @@ func TestLRU_Order(t *testing.T) {
 	p := NewLRU()
 	a, b, c := hashByte(1), hashByte(2), hashByte(3)
 
-	p.RecordWrite(a, 10)
-	p.RecordWrite(b, 10)
-	p.RecordWrite(c, 10) // recency front→back: c, b, a  (a is oldest)
+	p.RecordWrite(WriteMeta{Key: a, Size: 10})
+	p.RecordWrite(WriteMeta{Key: b, Size: 10})
+	p.RecordWrite(WriteMeta{Key: c, Size: 10}) // recency front→back: c, b, a  (a is oldest)
 
 	if got, ok := p.Victim(); !ok || got != a {
 		t.Fatalf("Victim after 3 writes = %x ok=%v, want %x (oldest)", got, ok, a)

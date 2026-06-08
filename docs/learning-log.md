@@ -16,6 +16,74 @@
 
 ---
 
+## Phase 5 - The differentiator: cost-aware + fair eviction
+
+### 2026-06-07 - 5b: the work-conserving floor + the fairness knob (and a knob that saturates)
+**Phase:** 5b (the stretch half — the actual tradeoff curve)
+**What I was doing:** Turned 5a's static caps into elastic **floors** and added the
+`fairness_weight ∈ [0,1]` knob (`-eviction gdsf-elastic`, ADR 0030), then swept it to draw the
+efficiency-vs-fairness Pareto frontier (`scripts/phase5b-sweep.ps1`, `phase5b-eviction.md`).
+**What I learned / what broke:**
+- **"Work-conserving" is a one-line idea with a big payoff.** Making `OverQuota()` return false in
+  elastic mode means a tenant never gets reclaimed just for exceeding its floor — only the global
+  watermark evicts, so idle capacity is always lent out. That single change made elastic `w=0.25`
+  (14.4% overall / 12.3% min-tenant) **Pareto-dominate** the 5a static caps (12.2% / 10.3%) — better
+  on *both* axes. The hard cap was leaving capacity on the floor; not doing that is free.
+- **Fairness as a victim-selection discount, not a separate mechanism.** `H_eff = H/(1+w·overage)`
+  protects under-floor tenants and exposes over-floor ones, with `w=0` collapsing to pure GDSF. The
+  trick that kept it cheap: a *per-tenant scalar* discount preserves each tenant's heap order, so
+  victim selection is still an O(#tenants) root-peek — no global re-sort.
+- **Keep the value scale clean.** `L` must advance by the victim's *true* priority, not the discounted
+  score — the knob decides *who* pays, it mustn't corrupt the global GreedyDual aging.
+- **The knob saturates — and saying so is the point.** The entire transition is in `w ∈ [0, 0.25]`;
+  `w ∈ [0.25, 1]` is a flat plateau. A multiplicative discount is hypersensitive near 0: once it
+  reorders victims toward over-floor tenants, more `w` changes nothing. So this dial is closer to
+  off/on than smooth. The honest write-up names the fix (an additive rank-blend) without building it.
+- **Concurrency-8 eviction order is nondeterministic**, so a single seed gave a non-monotonic
+  mid-curve. Averaging 3 seeds in the sweep script removed the jitter and the frontier read cleanly.
+**Why it matters / what I'd redo:** This *is* the differentiator's headline — "here is my cache's
+efficiency/fairness frontier, here's why the work-conserving floor beats a hard cap, and here's where
+the knob actually has leverage." The redo: a finer sweep of the `[0, 0.25]` knee and the additive
+blend to get a dial with usable mid-range.
+**Links:** ADR 0030, ADR 0029, ADR 0007, `docs/benchmarks/phase5b-eviction.md`,
+`internal/cache/gdsf.go`, `scripts/phase5b-sweep.ps1`
+
+### 2026-06-07 - GDSF + static quotas: the efficiency-vs-fairness tension, made visible
+**Phase:** 5a (the must-ship half of the headline differentiator)
+**What I was doing:** Built the cost-aware GDSF eviction policy (`H = L + freq·cost/size`) plus
+static per-tenant byte quotas behind the Phase 4 `EvictionPolicy` seam, wired `-eviction gdsf` /
+`-tenant-quota`, extended loadgen with a 3-tenant workload (`-multitenant`), and benchmarked
+LRU vs GDSF vs GDSF+quotas on one bounded shard (ADR 0029).
+**What I learned / what broke:**
+- **A benchmark only shows what the workload lets it.** The first multi-tenant run had GDSF ≈ LRU
+  (A 47.5% vs 47.3%) — useless. Cause: the cache easily held every tenant's *single* hot prefix, so
+  hit rate was profile-determined, not policy-determined. The fix was a **pool of distinct hot
+  prefixes per tenant** whose union *oversubscribes* the cache. Only when the policy must choose
+  *whose* reusable blocks to evict does cost-awareness (and a quota) have anything to do. This is the
+  "multi-tenant load generator is the single most under-estimated cost" warning from plan §3.5, felt
+  first-hand.
+- **The tension is real and the policy controls it.** GDSF maximises aggregate hit rate (17.6%→21.5%)
+  by hoarding the expensive tenant's high-`cost` blocks — and *starves the cheap tenant harder than
+  LRU* (5.6%→3.1%). Static quotas flip it: min-tenant 3.1%→10.5%, cheap tenant 3.1%→16.9%, at an
+  efficiency cost (→12.4%). These are the two endpoints of the `fairness_weight` knob 5b will sweep.
+- **The optional-capability interface pattern kept the blast radius tiny.** Quota enforcement rides
+  the *existing* single Evictor via an optional `QuotaPolicy` (`OverQuota()`) the Store type-asserts
+  — so LRU/Noop are byte-identical to Phase 4 and `store.go` changed by ~one metadata-forward line.
+  Adding a second signalling path would have been the obvious-but-wrong move.
+- **GreedyDual aging (`L`) is the non-obvious bit:** advancing `L` to each victim's priority is what
+  makes a once-hot block age out without an explicit timestamp — LFU can't, LRU ignores cost. Tested
+  white-box (`p.inflation`) since it has no external surface.
+- **`-race` still needs WSL2** (Windows toolchain lacks 64-bit cgo, per Phase 4). The default WSL
+  distro was `docker-desktop` (no Go); had to target `wsl -d Ubuntu` and call `/usr/local/go/bin/go`
+  by full path (Git-bash mangles `/mnt/...` args; PowerShell→wsl avoids it). Race-clean on the new
+  GDSF code.
+**Why it matters / what I'd redo:** This is the interview centrepiece — "here is the
+efficiency/fairness frontier of my cache and where I'd set the knob," not "X% faster." The honest
+caveat to carry forward: 5a's quotas are also caps, so the GDSF+quota point is deliberately
+fairness-favouring — one point, not the curve. 5b draws the curve.
+**Links:** ADR 0029, ADR 0007, `docs/benchmarks/phase5a-eviction.md`,
+`internal/cache/{gdsf,eviction,store,evictor}.go`, `cmd/loadgen/main.go`
+
 ## Phase 4 - Eviction, observability & chaos
 
 ### 2026-06-06 - First AWS apply: the cluster goes live, and t3 burst credits bite

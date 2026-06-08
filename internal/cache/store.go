@@ -147,18 +147,40 @@ func (s *Store) LowWater() int64 { return s.loWater }
 // to callers; only signalEvict sends.
 func (s *Store) EvictSignal() <-chan struct{} { return s.evictSig }
 
-// signalEvict nudges the Evictor when usage is at/over the high-water mark. NON-BLOCKING: the
-// channel is buffered(1), so if a nudge is already pending we drop this one (coalescing — the
-// Evictor will drain to low-water regardless of how many writes piled up). Cheap enough to call
-// while holding the stripe lock because the send never blocks.
+// signalEvict nudges the Evictor when there is pressure work: the global high-water mark is
+// reached, OR (Phase 5a) a quota-enforcing policy reports some tenant is over its floor. NON-
+// BLOCKING: the channel is buffered(1), so if a nudge is already pending we drop this one
+// (coalescing — the Evictor drains fully regardless of how many writes piled up). Cheap enough to
+// call while holding the stripe lock because the send never blocks and OverQuota takes only the
+// policy lock (stripe -> policy order, same as RecordWrite).
 func (s *Store) signalEvict() {
-	if s.maxBytes <= 0 || s.totalBytes.Load() < s.hiWater {
-		return
+	pressured := s.maxBytes > 0 && s.totalBytes.Load() >= s.hiWater
+	if !pressured {
+		qp, ok := s.policy.(QuotaPolicy)
+		if !ok || !qp.OverQuota() {
+			return
+		}
 	}
 	select {
 	case s.evictSig <- struct{}{}:
 	default:
 	}
+}
+
+// needsEviction is the Evictor's drain-loop stop condition: keep freeing while usage is above the
+// low-water mark, OR while a quota policy reports a tenant over its floor. Splitting the global
+// (loWater) and per-tenant (OverQuota) triggers here keeps the Evictor policy-agnostic — it just
+// asks "is there still work?". With no quota policy this is exactly the old `Bytes() > loWater`.
+// Called WITHOUT a stripe lock (from the Evictor goroutine), so OverQuota's policy lock is the
+// only lock taken.
+func (s *Store) needsEviction() bool {
+	if s.maxBytes > 0 && s.totalBytes.Load() > s.loWater {
+		return true
+	}
+	if qp, ok := s.policy.(QuotaPolicy); ok && qp.OverQuota() {
+		return true
+	}
+	return false
 }
 
 // OverHardLimit reports whether accepting addBytes more would push past the hard ceiling
@@ -249,7 +271,7 @@ func (s *Store) Put(h BlockHash, e *Entry) uint64 {
 		CreatedAt:     created,
 	}
 	st.m[h] = stored
-	s.policy.RecordWrite(h, stored.SizeBytes)
+	s.policy.RecordWrite(WriteMeta{Key: h, TenantID: stored.TenantID, Size: stored.SizeBytes, Cost: stored.RecomputeCost})
 
 	// Account for the DELTA this write moved the resident size by: on a first write prevSize is
 	// 0 so we add the whole entry; on an overwrite we add only (new - prev), which is negative
@@ -306,7 +328,7 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 		CreatedAt:     created,
 	}
 	st.m[h] = stored
-	s.policy.RecordWrite(h, stored.SizeBytes)
+	s.policy.RecordWrite(WriteMeta{Key: h, TenantID: stored.TenantID, Size: stored.SizeBytes, Cost: stored.RecomputeCost})
 
 	// Same accounting as Put — replication writes count toward the byte budget too, so a replica
 	// can hit its own watermark and evict independently of the primary (fine: cache data is

@@ -18,7 +18,7 @@ from vllm.distributed.kv_transfer.kv_connector.v1.base import (  # type: ignore
 from .blockio import BlockLayout, deserialize_into, infer_block_axis, serialize_block
 from .client import KVCacheClient
 from .codec import encode_frames, tensor_to_frame
-from .hashing import Block, chain_blocks
+from .hashing import Block, chain_blocks, shard_model_id
 
 
 class DistributedKVMetadata(KVConnectorMetadata):
@@ -37,13 +37,20 @@ class DistributedKVWorkerMetadata(KVConnectorWorkerMetadata):
 
 
 class DistributedKVConnector(KVConnectorBase_V1):
-    """Single-node external KV cache connector for Phase 1.
+    """External KV cache connector (vLLM dynamic connector, no fork — ADR 0008).
 
     The scheduler side performs cache lookup and tells vLLM how many full-block
     prompt tokens are externally available. The worker side provides synchronous
     hooks for loading/saving. vLLM's paged KV layout has changed across releases;
     the tensor copy helpers are deliberately small and isolated so the installed
     version can be adapted in one module after inspecting the live layout.
+
+    Tensor parallelism: vLLM runs one worker per GPU rank, each holding a disjoint
+    KV-head shard. Each rank reads/writes its own shard under a rank-namespaced key
+    (shard_model_id); the scheduler checks presence under canonical rank 0 and trusts
+    the lockstep invariant (all ranks save the same full blocks in the same forward).
+    A missing/partial shard degrades to recompute via the ADR 0016 load guard, never
+    to a wrong serve. World size 1 leaves the single-GPU key path unchanged.
     """
 
     @classmethod
@@ -73,6 +80,13 @@ class DistributedKVConnector(KVConnectorBase_V1):
         self.model_id = str(extra.get("model_id", ""))
         self.block_tokens = int(extra.get("block_tokens", 16))
         self.tenant_id = str(extra.get("tenant_id", ""))
+
+        # Tensor-parallel keying (see hashing.shard_model_id). The TP world size is a
+        # global config value available on BOTH the scheduler and worker connectors;
+        # the per-worker rank is only known inside a worker process (set in
+        # register_kv_caches). Scheduler-side lookups use canonical rank 0.
+        self.tp_world = _tp_world_size(vllm_config)
+        self.tp_rank = 0
         self.client = KVCacheClient(self.cache_addr, int(extra.get("deadline_ms", 200)))
         self.kv_caches: dict[str, Any] = {}
         self.layer_names: list[str] = []
@@ -98,6 +112,10 @@ class DistributedKVConnector(KVConnectorBase_V1):
     def register_kv_caches(self, kv_caches: dict[str, Any]):
         self.kv_caches = dict(kv_caches)
         self.layer_names = list(self.kv_caches.keys())
+        # This runs inside a worker process, after the TP group is initialized, so the
+        # rank is now resolvable. Each rank holds its own KV-head shard (the registered
+        # tensors are already this rank's slice), and writes/reads it under its own key.
+        self.tp_rank = _tp_rank()
         self._init_layout()
         if self.probe:
             self._probe_layout()
@@ -185,7 +203,9 @@ class DistributedKVConnector(KVConnectorBase_V1):
             return 0, False
 
         first_needed_block = num_computed_tokens // self.block_tokens
-        presences = self.client.lookup(model_id, blocks)
+        # Presence under canonical rank 0; the lockstep invariant makes it stand in for
+        # all shards (see shard_model_id). The block hashes themselves stay rank-agnostic.
+        presences = self.client.lookup(shard_model_id(model_id, 0, self.tp_world), blocks)
         hit_blocks = 0
         versions: list[int] = []
         for presence in presences[first_needed_block:]:
@@ -271,7 +291,9 @@ class DistributedKVConnector(KVConnectorBase_V1):
             for rb in plan["blocks"]
         ]
         t0 = time.perf_counter()
-        payloads = self.client.batch_fetch(model_id, blocks, plan["versions"])
+        # This rank loads its OWN KV-head shard, keyed by its rank (see shard_model_id).
+        shard_id = shard_model_id(model_id, self.tp_rank, self.tp_world)
+        payloads = self.client.batch_fetch(shard_id, blocks, plan["versions"])
         t_fetch = time.perf_counter() - t0
 
         n_copied = 0
@@ -318,6 +340,8 @@ class DistributedKVConnector(KVConnectorBase_V1):
         """Serialize each newly-computed full block from the paged cache and write it back."""
         save_start = int(plan.get("save_start", 0))
         model_id = plan["model_id"]
+        # This rank saves its OWN KV-head shard, keyed by its rank (see shard_model_id).
+        shard_id = shard_model_id(model_id, self.tp_rank, self.tp_world)
         for j, raw_block in enumerate(plan["save_blocks"]):
             logical = save_start + j
             if logical >= len(row):
@@ -334,7 +358,7 @@ class DistributedKVConnector(KVConnectorBase_V1):
                 continue
             recompute_cost = float(len(block.token_ids))  # GDSF cost model (plan §3.5)
             version = self.client.write(
-                model_id, block, payload, tenant_id=self.tenant_id, recompute_cost=recompute_cost
+                shard_id, block, payload, tenant_id=self.tenant_id, recompute_cost=recompute_cost
             )
             if version is not None:
                 self.saved_request_ids.add(plan["request_id"])
@@ -418,7 +442,14 @@ class DistributedKVConnector(KVConnectorBase_V1):
     # ------------------------------------------------------------------- probe
 
     def _probe_layout(self) -> None:
-        record: dict[str, Any] = {"block_tokens": self.block_tokens, "layers": {}}
+        record: dict[str, Any] = {
+            "block_tokens": self.block_tokens,
+            # Under TP the per-rank KV tensor should have num_kv_heads/tp_world heads;
+            # the dump lets the paid window confirm heads are sharded before any real run.
+            "tp_rank": self.tp_rank,
+            "tp_world": self.tp_world,
+            "layers": {},
+        }
         for name, tensor in self.kv_caches.items():
             record["layers"][name] = self._tensor_desc(tensor)
         record["inferred_layout"] = (
@@ -509,3 +540,33 @@ def _request_id(request: Any) -> str:
 
 def _request_model_id(request: Any) -> str:
     return str(getattr(request, "model_id", getattr(request, "model", "default")))
+
+
+def _tp_world_size(vllm_config: Any) -> int:
+    """Tensor-parallel world size from config (available on scheduler AND worker).
+
+    Defensive: field names have drifted across vLLM releases, and a missing value
+    means single-GPU (world 1), which keeps the bare-model_id path unchanged.
+    """
+    pc = getattr(vllm_config, "parallel_config", None)
+    size = getattr(pc, "tensor_parallel_size", None)
+    if isinstance(size, int) and size > 0:
+        return size
+    return 1
+
+
+def _tp_rank() -> int:
+    """This worker's tensor-parallel rank, or 0 when TP is not initialized.
+
+    Only callable inside a worker process once the TP group exists (i.e. from
+    register_kv_caches onward). On the scheduler side, or under CPU tests, the
+    import/lookup fails and we fall back to canonical rank 0.
+    """
+    try:
+        from vllm.distributed.parallel_state import (  # type: ignore
+            get_tensor_model_parallel_rank,
+        )
+
+        return int(get_tensor_model_parallel_rank())
+    except Exception:
+        return 0

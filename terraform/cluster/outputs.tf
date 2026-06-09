@@ -32,3 +32,14 @@ output "loadgen_hint" {
   description = "How to drive the cluster (loadgen must run inside the VPC — cache nodes advertise private IPs)."
   value       = "ssh ec2-user@<cache_public_ip>  then:  ./loadgen -etcd ${local.etcd_client_endpoints} -verify -duration 60s -payload-bytes 262144"
 }
+
+# --- GPU benchmark node (only populated when gpu_count > 0; ADR 0032) ---
+output "gpu_public_ips" {
+  description = "GPU benchmark node public IPs — SSH here to install vLLM + the connector and run the distributed TTFT benchmark."
+  value       = aws_instance.gpu[*].public_ip
+}
+
+output "cache_private_ips" {
+  description = "Cache node PRIVATE IPs. Point the connector's --cache-addr at one of these (e.g. <ip>:50051) from the GPU node, which shares the VPC."
+  value       = aws_instance.cache[*].private_ip
+}

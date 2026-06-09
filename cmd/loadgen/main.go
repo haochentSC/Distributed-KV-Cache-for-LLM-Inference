@@ -70,6 +70,9 @@ func main() {
 	seed := flag.Int64("seed", 1, "RNG seed (logged for reproducibility)")
 	trace := flag.String("trace", "", "replay a real-workload trace (JSONL from scripts/prep_sharegpt.py) instead of synthetic traffic; ignores prefix/tail flags")
 	multitenant := flag.Bool("multitenant", false, "drive 3 tenants with distinct profiles (cheap/frequent, expensive/rare, bursty) to exercise the Phase 5 GDSF + per-tenant-quota policy; reports per-tenant hit rate")
+	verifyColdtier := flag.Bool("verify-coldtier", false, "cold-tier round-trip check (ADR 0027): write a working set larger than the cache so it evicts to S3, then DIRECTLY Fetch every block (bypassing the hot-only Lookup) so the server reads back through cold; asserts every block returns and payload=f(hash) (ADR 0016). Point -members at ONE node so the whole working set lands on it. Exits non-zero on any loss or violation.")
+	coldtierBlocks := flag.Int("coldtier-blocks", 0, "number of distinct blocks to write for -verify-coldtier; size it so coldtier-blocks*payload-bytes comfortably EXCEEDS the target node's -max-bytes (else nothing evicts and the check is vacuous). Required when -verify-coldtier is set.")
+	coldtierSettle := flag.Duration("coldtier-settle", 3*time.Second, "pause after writing before fetching, so async spills (ADR 0027) land in S3 before the read-back")
 	flag.Parse()
 
 	log.Printf("loadgen payload=%dB block=%dtok prefix-share=%.2f conc=%d req/cli=%d dur=%s verify=%v prefix=%dblk tail=%dblk seed=%d",
@@ -92,6 +95,16 @@ func main() {
 		}
 		log.Printf("loadgen membership static=%v", addrs)
 		router.SetMembers(staticMembers(addrs))
+	}
+
+	// Cold-tier round-trip verify (ADR 0027): a standalone mode that writes more than the cache
+	// holds, lets it spill, then reads each block straight back through the cold tier. It uses the
+	// router/client/oracle already set up, then exits — none of the synthetic workload below runs.
+	if *verifyColdtier {
+		if *coldtierBlocks <= 0 {
+			log.Fatalf("-verify-coldtier needs -coldtier-blocks > 0 (size it so coldtier-blocks*payload-bytes exceeds the node's -max-bytes, else nothing evicts)")
+		}
+		os.Exit(runColdtierVerify(router, *model, *blockTokens, *payloadBytes, *coldtierBlocks, *coldtierSettle, *seed))
 	}
 
 	// The hot prefix is identical for every hot request, so once any worker writes it the
@@ -573,6 +586,92 @@ func (w workload) oneRequest(ctx context.Context, client kvcachev1.KVCacheClient
 		res.writes++
 	}
 	return nil
+}
+
+// runColdtierVerify proves the S3 cold tier end-to-end (ADR 0027). It writes nBlocks distinct
+// single-block prompts (each verifiable, payload=f(hash)), waits for the hot cache to overflow its
+// byte budget and spill the overflow to S3, then DIRECTLY Fetches every block. The direct Fetch is
+// the point: the server's Lookup is hot-only, so a Lookup-gated client would treat an evicted block
+// as absent and never touch the cold path — Fetch (and BatchFetch) are the only RPCs that read
+// through to cold (server.go coldHit). A block that was evicted can therefore only come back via
+// the cold tier, so "every block returns + 0 violations" is an end-to-end cold round-trip proof
+// (pair it with `aws s3 ls s3://<cold-bucket>/blocks/` in the runbook to confirm objects landed).
+//
+// Returns a process exit code: 0 only if every block came back AND every byte matched f(hash).
+func runColdtierVerify(router *cluster.Router, model string, blockTokens, payloadBytes, nBlocks int, settle time.Duration, seed int64) int {
+	w := workload{router: router, model: model, blockTokens: blockTokens, payloadBytes: payloadBytes, verify: true}
+	rng := rand.New(rand.NewSource(seed))
+
+	// Distinct single-block prompts so each block is independently keyed and routed by its own hash.
+	blocks := make([]blockhash.Block, 0, nBlocks)
+	for i := 0; i < nBlocks; i++ {
+		bs := blockhash.ChainBlocks(model, randomTokens(rng, blockTokens), blockTokens)
+		if len(bs) == 0 {
+			log.Fatalf("block-tokens=%d produced no full block", blockTokens)
+		}
+		blocks = append(blocks, bs[0])
+	}
+	log.Printf("coldtier-verify: writing %d blocks x %d bytes = %.1f MiB (must exceed the node's -max-bytes to force a spill)",
+		nBlocks, payloadBytes, float64(nBlocks)*float64(payloadBytes)/(1<<20))
+
+	ctx := context.Background()
+	payload := make([]byte, payloadBytes)
+	wrote := 0
+	for i := range blocks {
+		b := blocks[i]
+		conns := router.OwnerConns(b.Hash[:], 1)
+		if len(conns) == 0 {
+			log.Fatalf("coldtier-verify: no owner for block %x (is the cluster up?)", b.Hash[:6])
+		}
+		client := kvcachev1.NewKVCacheClient(conns[0])
+		if err := w.write(ctx, client, b, payload, b.Hash[:], "", 0); err != nil {
+			log.Fatalf("coldtier-verify: write block %x failed: %v", b.Hash[:6], err)
+		}
+		wrote++
+	}
+
+	// Let the background evictor overflow and the async spills (ADR 0027) land in S3.
+	log.Printf("coldtier-verify: wrote %d blocks; waiting %s for evictions to spill to S3", wrote, settle)
+	time.Sleep(settle)
+
+	// Direct Fetch (no Lookup) every block: evicted ones MUST come back through the cold tier.
+	var res result
+	expected := make([]byte, payloadBytes)
+	served := 0
+	for i := range blocks {
+		b := blocks[i]
+		conns := router.OwnerConns(b.Hash[:], 2) // try replica too, in case the primary moved
+		got := false
+		var lastErr error
+		for _, conn := range conns {
+			client := kvcachev1.NewKVCacheClient(conn)
+			hit, err := w.fetch(ctx, client, b, expected, &res) // verifies payload=f(hash) inline
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			got = hit
+			break
+		}
+		if got {
+			served++
+		} else if lastErr != nil {
+			log.Printf("coldtier-verify: fetch block %x errored on every owner: %v", b.Hash[:6], lastErr)
+		} else {
+			log.Printf("coldtier-verify: block %x not found in hot OR cold (lost — spill missing?)", b.Hash[:6])
+		}
+	}
+
+	fmt.Println("---- coldtier-verify report ----")
+	fmt.Printf("written:      %d\n", wrote)
+	fmt.Printf("served back:  %d / %d  (any shortfall = a block neither hot nor in S3)\n", served, wrote)
+	fmt.Printf("correctness:  %d violations (must be 0; ADR 0016)\n", res.violations)
+	if served != wrote || res.violations > 0 {
+		log.Printf("FAIL: cold-tier round-trip lost %d block(s) and/or saw %d violation(s)", wrote-served, res.violations)
+		return 1
+	}
+	fmt.Println("PASS: every block read back (through cold tier where evicted) with no correctness violation")
+	return 0
 }
 
 // fetch streams a block's bytes. It returns hit=false (not an error) on a NotFound — that is a

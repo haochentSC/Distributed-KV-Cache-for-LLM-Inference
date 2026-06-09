@@ -18,6 +18,35 @@
 
 ## Phase 4.5 - End-to-end GPU TTFT benchmark
 
+### 2026-06-09 - Tensor parallelism shards the KV cache, so the cache KEY has to shard too
+**Phase:** 4.5 (distributed prep, no spend; ADR 0032)
+**What I was doing:** Prepping the paid AWS window for a 30B-class TP=4 headline run — GPU-node
+Terraform, a distributed benchmark driver, a cold-tier verify, and the connector changes TP needs.
+**What I learned / what broke:**
+- **Under tensor parallelism, each GPU rank holds only a SLICE of the KV heads** (`num_kv_heads/tp`),
+  and vLLM runs one worker (one connector instance) per rank. But our block hash is seeded only from
+  `(token_ids, model_id)`, so it's *identical across ranks* — every rank would write its different
+  shard to the same `(model_id, hash)` server entry and overwrite the others, then all ranks would
+  load one rank's bytes. That's not a miss; it's a *wrong serve*, the one thing ADR 0016 forbids.
+- **The fix doesn't touch the server.** Since the server treats `model_id` as opaque (ADR 0010), I
+  fold the rank into it (`shard_model_id` → `model#tp{r}/{w}`). The hash stays rank-independent (it
+  must — the scheduler computes it and the workers reuse it). World size 1 returns the bare id, so the
+  single-GPU path is byte-identical to ADR 0031.
+- **Scheduler vs worker is the subtle part.** `get_num_new_matched_tokens` runs scheduler-side, which
+  has no rank. So presence is checked under *canonical rank 0*, trusting a lockstep invariant (all
+  ranks save the same blocks in the same forward). I didn't need a distributed transaction to make
+  that safe — the existing load hash-guard + `get_block_ids_with_load_errors` already turn any
+  shard gap into a recompute. Optimistic path, correctness fallback.
+- **`Lookup` is hot-only**, so a Lookup-gated client never exercises the cold tier — which is why the
+  cold-tier verify has to *directly* Fetch evicted blocks to prove the S3 read-through.
+**Why it matters / what I'd redo:** The instinct "the cache is keyed by content, so it's
+parallelism-agnostic" is exactly wrong once the *content itself* is sharded across workers. Keying is
+a distributed-systems decision, not a hashing detail. I'd consider mixing the rank into the hash later
+(spreads a hot prefix's shards across nodes instead of piling them on one) — deferred, since it
+couples the Python hash to Go `internal/blockhash`.
+**Links:** ADR 0032, `connector/src/kvcache_connector/hashing.py` (`shard_model_id`), `connector.py`,
+`terraform/cluster/gpu.tf`, `docs/benchmarks/aws-batch-runbook.md`.
+
 ### 2026-06-08 - The cache loses on a laptop — and the *why* is the whole lesson
 **Phase:** 4.5 (the one number that needs a real GPU; single-node, RTX 3080 + WSL2)
 **What I was doing:** Wired the stubbed vLLM worker-side tensor-copy hooks (probe the live paged-KV

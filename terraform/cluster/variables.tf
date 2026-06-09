@@ -74,3 +74,37 @@ variable "image_tag" {
   type        = string
   default     = "latest"
 }
+
+# --- GPU benchmark node (Phase 4.5 distributed TTFT; ADR 0032) -----------------------------------
+# This is the ONLY expensive resource in the project and is OFF by default. It exists solely to run
+# the distributed vLLM -> multi-node cache TTFT benchmark in one paid window, then be destroyed.
+# Bring it up with `-var gpu_count=1`; tear it down with `-var gpu_count=0` (or terraform destroy).
+variable "gpu_count" {
+  description = "Number of GPU benchmark nodes. 0 = created by nothing (default; no GPU bill). Set to 1 only for the paid benchmark window, then back to 0."
+  type        = number
+  default     = 0
+}
+
+variable "gpu_instance_type" {
+  description = "GPU instance for the TTFT benchmark. g5.12xlarge = 4x A10G (96 GB) — fits a ~30B bf16 model with tensor_parallel_size=4. Bills hourly: destroy after the run."
+  type        = string
+  default     = "g5.12xlarge"
+}
+
+variable "gpu_root_gb" {
+  description = "Root EBS size (GiB) for the GPU node — must hold CUDA/PyTorch + the Hugging Face weights cache (a 30B model is ~60 GB on disk)."
+  type        = number
+  default     = 200
+}
+
+variable "gpu_ami_id" {
+  description = "Explicit AMI id for the GPU node (an AWS Deep Learning AMI with NVIDIA driver + PyTorch). Leave empty to resolve gpu_ami_ssm_param instead. Set this if the SSM path has drifted."
+  type        = string
+  default     = ""
+}
+
+variable "gpu_ami_ssm_param" {
+  description = "SSM public parameter resolving to a Deep Learning AMI id. Best-effort default; VERIFY in the console before the window (these paths drift across DLAMI releases), or set gpu_ami_id directly."
+  type        = string
+  default     = "/aws/service/deeplearning/ami/x86_64/oss-nvidia-driver-gpu-pytorch-2.7-ubuntu-22.04/latest/ami-id"
+}

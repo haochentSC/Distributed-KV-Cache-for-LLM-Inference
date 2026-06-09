@@ -47,3 +47,29 @@ def chain_blocks(model_id: str, token_ids: Iterable[int], block_tokens: int) -> 
 
 def chain_hashes(model_id: str, token_ids: Iterable[int], block_tokens: int) -> list[bytes]:
     return [b.hash for b in chain_blocks(model_id, token_ids, block_tokens)]
+
+
+def shard_model_id(model_id: str, tp_rank: int, tp_world: int) -> str:
+    """Namespace the cache key by tensor-parallel rank.
+
+    Under tensor parallelism vLLM runs one worker per GPU rank, each holding a
+    DISJOINT shard of the KV heads. The block hash, however, is seeded only from
+    token_ids + the bare model_id (see chain_blocks), so it is identical across
+    ranks — every rank would otherwise key the same (model_id, hash) entry on the
+    server and clobber each other's shard, then serve one rank's bytes to all of
+    them. We keep the hash rank-independent (it must match across scheduler/worker)
+    and instead fold the rank into the OPAQUE model_id the connector sends, so each
+    rank owns a distinct server entry. The Go server is untouched (ADR 0010): it
+    only ever sees an opaque string.
+
+    World size 1 (single GPU) returns the bare model_id unchanged, so the
+    single-GPU path stays byte-identical to the Phase 4.5 results.
+
+    The scheduler side (presence/lookup) has no rank; it queries canonical rank 0
+    and relies on the lockstep invariant — all ranks save the same full blocks in
+    the same forward, so rank 0's presence implies every shard exists. A partial
+    write degrades to recompute via the ADR 0016 load guard, never to a wrong serve.
+    """
+    if tp_world <= 1:
+        return model_id
+    return f"{model_id}#tp{tp_rank}/{tp_world}"

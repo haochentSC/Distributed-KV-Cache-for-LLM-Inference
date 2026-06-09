@@ -21,10 +21,16 @@ ADR 0030): elastic work-conserving floors + the `fairness_weight ∈ [0,1]` knob
 watermark-only). Swept the efficiency-vs-fairness Pareto frontier (`scripts/phase5b-sweep.ps1`,
 `docs/benchmarks/phase5b-eviction.md`): `w=0` efficiency corner (20.0%/1.9% min), `w≥0.25` fairness
 plateau (~14%/~12% min); **elastic Pareto-dominates the 5a static caps**; the knob saturates fast.
-**Deferred AWS batch:** cold-tier round-trip verify, AWS chaos (`aws-chaos.sh`, `tc`/`iptables`),
-CloudWatch alarm wiring, and re-running the 5a/5b benchmarks on the 3-node cluster — all in one paid
-window. vLLM tensor-copy hooks + the TTFT exit gate remain deferred to Phase 4.5 (GPU path).
-**Remember to `terraform destroy` the AWS cluster when not actively testing — it bills hourly.**
+**Phase 4.5 GPU path:** single-node TTFT measured + decomposed (ADR 0031) — the cache loses at ≤3B for
+*environmental* reasons (WSL2 unpinned memory, Python/protobuf hot path, throttled KV cache), deficit
+closing with model size. **Distributed run prepped, no spend (2026-06-09, ADR 0032):** headline is a
+30B-class model with tensor parallelism (TP=4) on a `g5.12xlarge`; the connector keys each rank's
+KV-head shard distinctly (`shard_model_id`; server untouched), a cost-guarded GPU node lives in
+Terraform (`gpu_count` defaults to 0), plus a TP-aware distributed driver and `loadgen -verify-coldtier`.
+**Deferred to one paid window — see the runbook `docs/benchmarks/aws-batch-runbook.md`:** the distributed
+TTFT run, cold-tier round-trip verify, AWS chaos (`aws-chaos.sh`, `tc`/`iptables`), CloudWatch alarms,
+and the 5a/5b cluster re-run.
+**Remember to `terraform destroy` the AWS cluster when not actively testing — it bills hourly (the GPU node especially).**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->

@@ -1,11 +1,12 @@
 """Phase 4.5 distributed TTFT benchmark — the paid-window headline (ADR 0031/0032).
 
-This runs on a GPU node (AWS g5.12xlarge, 4x A10G) and points vLLM, via our dynamic
+This runs on a GPU node (AWS g5.2xlarge, 1x A10G — single-GPU, the 8-vCPU G/VT Spot quota
+path; TP=4 on g5.12xlarge is the deferred multi-GPU path, ADR 0032/0033) and points vLLM, via our dynamic
 connector, at the LIVE multi-node cache cluster over the VPC. Unlike the single-node
 laptop run (connector/scripts/run_phase1_benchmark.py), here:
 
-  * the model is production-class and tensor-parallel (``--tensor-parallel-size``, one
-    worker per GPU rank, each owning a KV-head shard — see connector.shard_model_id),
+  * the model runs on a real datacenter A10G (single-GPU by default; ``--tensor-parallel-size``
+    > 1 shards KV heads, one worker per rank — see connector.shard_model_id),
   * host memory is pinned (real Linux, not WSL2) and the KV cache is not throttled,
   * the workload is prefix-heavy and realistic (a long shared system-prompt / RAG /
     few-shot prefix + a short unique suffix per request), which is where prefix reuse
@@ -19,11 +20,11 @@ the shared prefix back). ``warm_vs_baseline_pct > 0`` means the cache wins. Swee
 Example (from the GPU node, cache reachable at a cluster private IP):
 
     python connector/scripts/run_distributed_benchmark.py \
-        --models Qwen/Qwen2.5-32B-Instruct \
-        --tensor-parallel-size 4 \
+        --models Qwen/Qwen2.5-7B-Instruct \
+        --tensor-parallel-size 1 \
         --cache-addr 10.0.1.23:50051 \
         --workload system_prompt --repeats 4,8,16 \
-        --output docs/benchmarks/phase45-distributed-qwen32b.json
+        --output docs/benchmarks/phase45-distributed-qwen7b.json
 """
 
 from __future__ import annotations
@@ -69,10 +70,12 @@ WORKLOADS: dict[str, str] = {
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--models", default="Qwen/Qwen2.5-32B-Instruct",
-                        help="Comma list of HF model ids to sweep (the scaling curve).")
-    parser.add_argument("--tensor-parallel-size", type=int, default=4,
-                        help="One vLLM worker per GPU rank; each owns a KV-head shard (ADR 0032).")
+    parser.add_argument("--models", default="Qwen/Qwen2.5-7B-Instruct",
+                        help="Comma list of HF model ids to sweep (the scaling curve). The default "
+                             "fits a single A10G (24 GB) in bf16; ~13-14B needs quantization.")
+    parser.add_argument("--tensor-parallel-size", type=int, default=1,
+                        help="GPU ranks; each owns a KV-head shard (ADR 0032). Default 1 = single-GPU "
+                             "(the 8-vCPU-quota path); set 4 for the g5.12xlarge TP path.")
     parser.add_argument("--cache-addr", default="localhost:50051",
                         help="Cache node host:port. On AWS use a cluster PRIVATE IP (same VPC).")
     parser.add_argument("--block-tokens", type=int, default=16)

@@ -16,6 +16,8 @@ sharegpt.json
 
 # Terraform
 **/.terraform/*
+# saved terraform plan dumps (local scratch; regenerate with terraform plan)
+terraform/cluster/plan-*.txt
 *.tfstate
 *.tfstate.*
 # *.tfvars may contain secrets; commit *.tfvars.example instead
@@ -29,6 +31,11 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+# pip install -e build metadata
+*.egg-info/
+
+# local probe output (the WSL2 reference dump lives under docs/benchmarks/ if committed)
+kv_layout_probe.json
 
 # Editor / OS
 .DS_Store

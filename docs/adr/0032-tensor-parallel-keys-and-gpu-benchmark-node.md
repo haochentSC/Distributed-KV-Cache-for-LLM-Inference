@@ -1,6 +1,10 @@
 # ADR 0032 — Tensor-parallel KV cache keys + a GPU benchmark node (prep for the distributed TTFT window)
 
-- **Status:** accepted (code prepped; the run itself is the paid AWS window)
+- **Status:** accepted (code prepped). **Scope update (2026-06-10, ADR 0033):** AWS partially approved
+  the G/VT Spot quota to **8 vCPUs** (standard-process GPU ceiling), so the AWS default benchmark is now
+  **single-GPU** (`g5.2xlarge`, `--tensor-parallel-size 1`, 7-8B). The TP=4 / 30B path below is kept in
+  code but **deferred** to an AWS-sales quota or a GPU-specialized cloud (the keying here is
+  provider-agnostic). At `world = 1` everything below reduces to the bare `model_id`, so single-GPU is unaffected.
 - **Date:** 2026-06-09 (Phase 4.5 — distributed prep)
 - **Deciders:** HC (+ Claude)
 - **Builds on:** ADR 0031 (single-node GPU TTFT; the deficit closes with model size, headline deferred

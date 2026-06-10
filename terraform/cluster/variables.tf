@@ -86,15 +86,15 @@ variable "gpu_count" {
 }
 
 variable "gpu_instance_type" {
-  description = "GPU instance for the TTFT benchmark. g5.12xlarge = 4x A10G (96 GB) — fits a ~30B bf16 model with tensor_parallel_size=4. Bills hourly: destroy after the run."
+  description = "GPU instance for the TTFT benchmark. Default g5.2xlarge = 1x A10G (24 GB) — fits a 7-8B bf16 (or ~13-14B quantized) model single-GPU, within the 8-vCPU G/VT Spot quota (ADR 0032/0033). The TP=4 / 30B path uses g5.12xlarge (4x A10G), which needs a 48-vCPU quota via AWS sales or a GPU-specialized cloud. Bills hourly: destroy after the run."
   type        = string
-  default     = "g5.12xlarge"
+  default     = "g5.2xlarge"
 }
 
 variable "gpu_root_gb" {
-  description = "Root EBS size (GiB) for the GPU node — must hold CUDA/PyTorch + the Hugging Face weights cache (a 30B model is ~60 GB on disk)."
+  description = "Root EBS size (GiB) for the GPU node — must hold CUDA/PyTorch + the Hugging Face weights cache (a 7-8B model is ~16 GB on disk; bump for a 30B/TP run)."
   type        = number
-  default     = 200
+  default     = 120
 }
 
 variable "gpu_ami_id" {

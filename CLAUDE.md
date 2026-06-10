@@ -23,13 +23,18 @@ watermark-only). Swept the efficiency-vs-fairness Pareto frontier (`scripts/phas
 plateau (~14%/~12% min); **elastic Pareto-dominates the 5a static caps**; the knob saturates fast.
 **Phase 4.5 GPU path:** single-node TTFT measured + decomposed (ADR 0031) — the cache loses at ≤3B for
 *environmental* reasons (WSL2 unpinned memory, Python/protobuf hot path, throttled KV cache), deficit
-closing with model size. **Distributed run prepped, no spend (2026-06-09, ADR 0032):** headline is a
-30B-class model with tensor parallelism (TP=4) on a `g5.12xlarge`; the connector keys each rank's
-KV-head shard distinctly (`shard_model_id`; server untouched), a cost-guarded GPU node lives in
-Terraform (`gpu_count` defaults to 0), plus a TP-aware distributed driver and `loadgen -verify-coldtier`.
-**Deferred to one paid window — see the runbook `docs/benchmarks/aws-batch-runbook.md`:** the distributed
+closing with model size. **Distributed prep (2026-06-09, ADR 0032):** connector keys each TP rank's
+KV-head shard distinctly (`shard_model_id`; server untouched), a cost-guarded GPU node in Terraform
+(`gpu_count` defaults to 0), a TP-aware distributed driver, and `loadgen -verify-coldtier`.
+**Rescoped 2026-06-10 (ADR 0033):** AWS approved the G/VT Spot quota only to **8 vCPUs** (standard GPU
+ceiling), so the AWS headline is now **single-GPU** — `g5.2xlarge` (1× A10G), `--tensor-parallel-size 1`,
+a 7-8B model (the pinned-memory env ADR 0031 said would flip the cache net-positive). The **TP=4 / 30B**
+path stays in code but is **deferred** to an AWS-sales quota or a GPU-specialized cloud (Lambda/RunPod/Modal;
+the TP keying is provider-agnostic). The "why AWS" story: AWS for the *distributed* system (real failure
+domains, Spot-as-chaos, S3 cold tier, IaC) — not for scale; GPU compute belongs on a GPU cloud.
+**Deferred to one paid window — see the runbook `docs/benchmarks/aws-batch-runbook.md`:** the single-GPU
 TTFT run, cold-tier round-trip verify, AWS chaos (`aws-chaos.sh`, `tc`/`iptables`), CloudWatch alarms,
-and the 5a/5b cluster re-run.
+and the 5a/5b cluster re-run (bring up cache nodes as `c7i.large` to dodge the t3 throttle).
 **Remember to `terraform destroy` the AWS cluster when not actively testing — it bills hourly (the GPU node especially).**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.

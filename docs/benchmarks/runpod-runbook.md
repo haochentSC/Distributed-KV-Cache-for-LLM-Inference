@@ -1,8 +1,12 @@
 # RunPod GPU-window runbook — long-context curve + TP=4/30B + serving demo (Phase 4.5-B)
 
+> **Session A EXECUTED 2026-06-11 — results in [`phase45-gpu-cloud.md`](phase45-gpu-cloud.md).**
+> Session B (TP=4 / 32B) pending — pickup checklist in [`runpod-gpu-window-plan.md`](runpod-gpu-window-plan.md).
+> **Terminate every pod when done** (console, not stop).
+
 Executes [`runpod-gpu-window-plan.md`](runpod-gpu-window-plan.md) (approved 2026-06-11). Two paid
-sessions on RunPod, both **execution-only** — everything below the pre-flight line was prepared and
-locally verified beforehand. Budget cap **~$20**; estimate **$7–12**.
+sessions on RunPod; Session A was execution-only after pre-flight commit `ff0feb3`. Budget cap
+**~$20**; Session A ≈ **$3–4**; Session B estimate **~$3–5**.
 
 > **Pods bill per minute. TERMINATE (not stop) the pod the moment a session ends.** A stopped pod
 > still bills for disk. Teardown sanity at the end of each session: the RunPod console shows
@@ -47,8 +51,8 @@ scp -P <port> bin/cache-server-linux-amd64 root@<pod-ip>:/root/cache-server
 scp -P <port> -r connector root@<pod-ip>:/root/connector
 
 # on the pod (RunPod PyTorch template)
-pip install vllm==0.22.1            # pin: the connector + probe were written against this
-pip install -e /root/connector
+pip install --break-system-packages vllm==0.22.1   # PEP 668 on the pod image; or use a venv
+pip install --break-system-packages -e /root/connector
 nvidia-smi                          # 1× A100 (Session A) / 4× A6000 or A40 (Session B)
 
 # cache server on loopback, generous cap (single-node control — the distributed story is
@@ -60,7 +64,11 @@ chmod +x /root/cache-server
 Working-set math (why 32 GiB is comfortable): Qwen2.5-7B ≈ 57 KB KV/token → a full 32k prefix
 ≈ 1.9 GB (rungs share prefix blocks); 14B ≈ 192 KB/token → ≈ 6.2 GB.
 
-## Session A — long-context curve + demo (1× A100 80 GB, ~2 h)
+## Session A — long-context curve + demo (1× A100 80 GB, ~2 h) — EXECUTED 2026-06-11
+
+Pod `fu7bdllghlfssu`, A100-SXM4-80GB, Direct TCP `154.54.102.45:18848`. Outcome: **no 32k crossover**
+(deficit −171% → −91%); AWS L4 +10.9% @ 4k remains headline. Artifacts in `docs/benchmarks/`.
+Re-run steps below only for reproduction.
 
 1. **Probe gate (before any benchmark spend):**
 
@@ -114,7 +122,7 @@ Working-set math (why 32 GiB is comfortable): Qwen2.5-7B ≈ 57 KB KV/token → 
 
 5. **TERMINATE the pod.** Console shows zero pods.
 
-## Session B — TP=4 / 32B (4× A6000 or A40, ~1–1.5 h)
+## Session B — TP=4 / 32B (4× A6000 or A40, ~1–1.5 h) — PENDING (next session)
 
 1. Common setup as above (16 GiB `-max-bytes` is plenty: repeats ≤ 32 ≈ 2.1k tokens × ~256 KB
    KV/token across ranks ≈ 0.5 GB).
@@ -143,14 +151,11 @@ Working-set math (why 32 GiB is comfortable): Qwen2.5-7B ≈ 57 KB KV/token → 
 
 4. **TERMINATE the pod.** Console shows zero pods.
 
-## Capture (local, free — after both sessions)
+## Capture (local — Session A done; finish after Session B)
 
-- Results doc `docs/benchmarks/phase45-gpu-cloud.md` (headline table, demo pointer, findings —
-  same shape as `phase45-distributed-gpu.md`).
-- **ADR 0034**: provider evaluation + decision (in the plan doc), loopback-cache framing, results,
-  what TP=4 proved.
-- Update the `CLAUDE.md` status block; add an EXECUTED banner to this runbook and the plan doc.
-- One conventional commit, no co-author trailer.
+- ✅ Results doc [`phase45-gpu-cloud.md`](phase45-gpu-cloud.md) (Session A tables + honest framing).
+- ✅ **ADR 0034** (Session A recorded; mark Session B complete when TP run lands).
+- ⬜ After Session B: update `phase45-gpu-cloud.md` TP section, `CLAUDE.md` → Phase 6, commit docs.
 
 ## Risks (from the plan; checked at the gates)
 

@@ -31,7 +31,9 @@ the legitimate single-GPU headline.
 
 **TP=4 / 30B is deferred (Option B):** needs 48 vCPUs via AWS sales, or more practically a
 GPU-specialized cloud (Lambda/RunPod/Modal) — the connector's TP keying (ADR 0032) is provider-agnostic.
-Use the `g5.12xlarge` + `--tensor-parallel-size 4` variants below only on that path.
+**RunPod Session A executed 2026-06-11 (ADR 0034); Session B pending** — see
+[`runpod-gpu-window-plan.md`](runpod-gpu-window-plan.md). Use the `g5.12xlarge` + `--tensor-parallel-size 4`
+variants below only on that path.
 
 ## Rough cost
 

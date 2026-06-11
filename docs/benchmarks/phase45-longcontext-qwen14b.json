@@ -1,0 +1,63 @@
+{
+  "phase": "4.5-distributed",
+  "tensor_parallel_size": 1,
+  "cache_addr": "127.0.0.1:50051",
+  "workload": "system_prompt",
+  "block_tokens": 16,
+  "runs": 8,
+  "models": [
+    {
+      "model": "Qwen/Qwen2.5-14B-Instruct",
+      "max_model_len": 32768,
+      "results": [
+        {
+          "repeat": 64,
+          "prompt_tokens": 4110,
+          "baseline_ms": {
+            "p50": 539.2715483903885,
+            "p95": 881.1601083725691,
+            "p99": 881.1601083725691,
+            "mean": 581.4903189893812
+          },
+          "external_cold_ms": {
+            "p50": 3627.4103950709105,
+            "p95": 3627.4103950709105,
+            "p99": 3627.4103950709105,
+            "mean": 3627.4103950709105
+          },
+          "external_warm_ms": {
+            "p50": 1992.821328341961,
+            "p95": 2017.1069204807281,
+            "p99": 2017.1069204807281,
+            "mean": 1976.766141364351
+          },
+          "warm_vs_baseline_pct": -269.5
+        },
+        {
+          "repeat": 256,
+          "prompt_tokens": 16399,
+          "baseline_ms": {
+            "p50": 2589.089225977659,
+            "p95": 2682.6742570847273,
+            "p99": 2682.6742570847273,
+            "mean": 2598.4195484779775
+          },
+          "external_cold_ms": {
+            "p50": 11906.065376475453,
+            "p95": 11906.065376475453,
+            "p99": 11906.065376475453,
+            "mean": 11906.065376475453
+          },
+          "external_warm_ms": {
+            "p50": 7698.732867836952,
+            "p95": 8519.193207845092,
+            "p99": 8519.193207845092,
+            "mean": 7708.348301006481
+          },
+          "warm_vs_baseline_pct": -197.4
+        }
+      ]
+    }
+  ],
+  "notes": "Wall-clock one-token latency as TTFT proxy. warm_vs_baseline_pct>0 = cache wins. Shared prefix is cached; each request adds a short unique suffix. Sweep --models for the TTFT-vs-model-size scaling curve (ADR 0031: the deficit closes as the model grows)."
+}

@@ -6,7 +6,7 @@ cost-aware + fair eviction), integrated with vLLM and deployed on AWS via Terraf
 
 **Source of truth:** [`docs/00-project-plan.md`](docs/00-project-plan.md) — strategy, phases,
 decisions log. Don't duplicate it here. Decisions are recorded as ADRs in `docs/adr/`.
-**Current phase: Phase 5 (the differentiator — cost-aware + fair eviction).**
+**Current phase: Phase 4.5-B (RunPod Session B pending) → Phase 6 polish.**
 Phases 1–4 are done: the CPU-only core (server, store, block-hash, load generator, Python connector
 libs), the consistent-hash ring + client routing, etcd-coordinated RF=2 async replication with
 implicit promotion and graceful/Spot drain (ADRs 0021–0023), and the Phase 4 LRU+watermark eviction,
@@ -41,8 +41,13 @@ capacity region-wide) — the cache loses 5% at trivial prefixes, breaks even ~1
 cluster re-run **reproduces the local Pareto frontier**. Fixes landed: container `AWS_REGION` (the cold
 tier was dead without it) + `GOMEMLIMIT` (t3.small OOM), `cache_max_bytes` 1.0 GB, AZ-independent GPU
 subnet (`gpu_az`). Known limitation: the spill pipeline sheds under burst eviction (drop-over-stall by
-design; ~40-60 S3 PUT/s vs hundreds/s bursts). **Next: Phase 6 (polish & story).**
-**The cluster is DESTROYED. Re-applying bills hourly — destroy again after any test.**
+design; ~40-60 S3 PUT/s vs hundreds/s bursts). **RunPod Option B (ADR 0034, 2026-06-11): Session A
+EXECUTED** — long-context curve + serving demo on 1× A100 80GB; **no 32k crossover** (A100 prefills
+too fast; warm path Python-bound); 14B *worse* than 7B at same tokens (KV-bytes/FLOPs). AWS L4
+**+10.9% @ 4k** stays the resume headline (`phase45-gpu-cloud.md`). **Session B pending:** TP=4 /
+Qwen2.5-32B on 4× A6000 — handoff [`runpod-gpu-window-plan.md`](docs/benchmarks/runpod-gpu-window-plan.md).
+**Next: finish Session B, then Phase 6 (polish & story).**
+**AWS cluster DESTROYED; terminate RunPod pods after each session.**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->

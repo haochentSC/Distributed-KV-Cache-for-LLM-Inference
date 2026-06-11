@@ -18,6 +18,29 @@
 
 ## Phase 4.5 - End-to-end GPU TTFT benchmark
 
+### 2026-06-11 - RunPod Session A: no 32k crossover on A100; crossover is GPU-class dependent
+**Phase:** 4.5-B (RunPod Option B, Session A; ADR 0034)
+**What I was doing:** Executed the RunPod long-context sweep (7B, 1k→32k), 14B scaling check, and
+`vllm serve` demo on 1× A100 80GB with loopback cache-server (Session B TP=4 still pending).
+**What I learned / what broke:**
+- **The plan's 20–40% @ 32k extrapolation did not land.** Warm path stayed Python/deserialize/copy
+  bound (~300 MB/s); A100 baseline prefill at 4k is **273 ms** vs AWS L4 **1,070 ms** — same connector,
+  opposite TTFT sign. Crossover needs *compute-bound* prefill (cost-tier serving GPU), not flagship
+  throughput.
+- **14B is worse than 7B at the same token count** (−270% vs −181% @ 4k) because KV bytes/token
+  scales faster than prefill FLOPs — refines ADR 0031's "deficit closes with model size" to
+  **KV-bytes / recompute-cost ratio**.
+- **RunPod ops:** Direct TCP SSH for `scp`; proxy `ssh.runpod.io` terminal-only; PEP 668 →
+  `--break-system-packages`; `--deadline-ms 15000` load-bearing (2s silently degrades to recompute).
+  Top repeat rung **504** not 512 (32,783 tokens overflows context).
+- **Serving demo:** connector works under OpenAI-compatible serve; TTFT regression on A100 is honest
+  (baseline 283 ms p50 vs warm 768 ms) — integration artifact, not headline.
+**Why it matters / what I'd redo:** A measured negative on flagship hardware is as valuable as a
+ cherry-picked positive — it defines *where* the cache pays (AWS L4 + long prefix + distributed).
+ Session B still owes TP=4 keying proof (ADR 0032). Terminate pods in console every time.
+**Links:** ADR 0034, `docs/benchmarks/phase45-gpu-cloud.md`, `runpod-gpu-window-plan.md` (Session B
+handoff), JSONs under `docs/benchmarks/phase45-longcontext-*`, `runpod-demo-serve.typescript`.
+
 ### 2026-06-09 - Tensor parallelism shards the KV cache, so the cache KEY has to shard too
 **Phase:** 4.5 (distributed prep, no spend; ADR 0032)
 **What I was doing:** Prepping the paid AWS window for a 30B-class TP=4 headline run — GPU-node

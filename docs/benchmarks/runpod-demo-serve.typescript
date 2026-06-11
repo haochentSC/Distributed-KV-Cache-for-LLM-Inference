@@ -1,0 +1,33 @@
+Script started on 2026-06-11 20:01:19+00:00 [COMMAND="python3 connector/scripts/demo_serve_client.py --label baseline --repeats 64 --requests 6" <not executed on terminal>]
+[demo] label=baseline  model=Qwen/Qwen2.5-7B-Instruct  workload=system_prompt  repeats=64  requests=6
+[demo]   req 0: TTFT    995.4 ms   total   1308.0 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 1: TTFT    283.3 ms   total    606.3 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 2: TTFT    282.7 ms   total    605.6 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 3: TTFT    284.2 ms   total    607.1 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 4: TTFT    283.4 ms   total    606.2 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 5: TTFT    283.0 ms   total    606.0 ms   | Ensuring data consistency and correctness is paramount to av
+[demo] baseline: TTFT p50 283.4 ms   mean 402.0 ms   min 282.7 ms   max 995.4 ms
+
+Script done on 2026-06-11 20:01:24+00:00 [COMMAND_EXIT_CODE="0"]
+Script started on 2026-06-11 20:13:05+00:00 [COMMAND="python3 connector/scripts/demo_serve_client.py --label external-cold --repeats 64 --requests 6" <not executed on terminal>]
+[demo] label=external-cold  model=Qwen/Qwen2.5-7B-Instruct  workload=system_prompt  repeats=64  requests=6
+[demo]   req 0: TTFT   1512.0 ms   total   1838.6 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 1: TTFT    786.0 ms   total   1109.8 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 2: TTFT    770.3 ms   total   1094.9 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 3: TTFT    770.2 ms   total   1100.2 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 4: TTFT    769.8 ms   total   1093.9 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 5: TTFT    766.0 ms   total   1089.9 ms   | Ensuring data consistency and correctness is paramount to av
+[demo] external-cold: TTFT p50 770.3 ms   mean 895.7 ms   min 766.0 ms   max 1512.0 ms
+
+Script done on 2026-06-11 20:13:13+00:00 [COMMAND_EXIT_CODE="0"]
+Script started on 2026-06-11 20:13:13+00:00 [COMMAND="python3 connector/scripts/demo_serve_client.py --label external-warm --repeats 64 --requests 6" <not executed on terminal>]
+[demo] label=external-warm  model=Qwen/Qwen2.5-7B-Instruct  workload=system_prompt  repeats=64  requests=6
+[demo]   req 0: TTFT    768.4 ms   total   1093.4 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 1: TTFT    755.5 ms   total   1079.2 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 2: TTFT    779.3 ms   total   1103.1 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 3: TTFT    767.9 ms   total   1092.4 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 4: TTFT    757.4 ms   total   1081.3 ms   | Ensuring data consistency and correctness is paramount to av
+[demo]   req 5: TTFT    751.9 ms   total   1075.6 ms   | Ensuring data consistency and correctness is paramount to av
+[demo] external-warm: TTFT p50 767.9 ms   mean 763.4 ms   min 751.9 ms   max 779.3 ms
+
+Script done on 2026-06-11 20:13:19+00:00 [COMMAND_EXIT_CODE="0"]

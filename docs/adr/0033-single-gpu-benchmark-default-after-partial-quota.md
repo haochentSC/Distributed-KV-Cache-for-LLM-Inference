@@ -74,3 +74,6 @@ defensible answer, not a retreat.
   `t3.small` load-host lesson (run `loadgen` from a peer node, not the node-under-test or etcd; prefer
   `c7i.large`) learned in the 2026-06-09 attempt.
 - Server, proto, ring, and Go `blockhash` remain untouched (as in ADR 0032).
+- **2026-06-11 update (ADR 0034):** RunPod Option B Session A executed (long-context + demo); Session B
+  (TP=4 keying) pending. AWS L4 +10.9% @ 4k remains the resume headline; RunPod refines where the
+  cache wins/loses (`phase45-gpu-cloud.md`).

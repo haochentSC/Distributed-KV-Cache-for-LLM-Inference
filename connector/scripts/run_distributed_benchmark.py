@@ -84,6 +84,11 @@ def main() -> None:
     parser.add_argument("--repeats", default="4,8,16",
                         help="Comma list of prefix repeat factors to sweep (scales the cached prefix).")
     parser.add_argument("--max-model-len", type=int, default=8192)
+    parser.add_argument("--deadline-ms", type=int, default=2000,
+                        help="Connector RPC deadline. A warm 32k-token fetch moves ~2 GB of KV "
+                             "(Qwen2.5-7B ~57 KB/token); on timeout batch_fetch degrades to "
+                             "recompute SILENTLY (warm == baseline), so size this generously for "
+                             "long-context sweeps (e.g. 15000 for the 32k ladder).")
     parser.add_argument("--gpu-mem-util", type=float, default=0.90,
                         help="No WSL2 throttle here — leave headroom for the KV cache on each A10G.")
     parser.add_argument("--enforce-eager", action="store_true",
@@ -132,6 +137,7 @@ def run_model(model: str, prefix: str, repeats: list[int], args: Any) -> dict[st
 
     # prompt = (shared prefix * r) + a short unique suffix, so only the shared prefix is a cache hit.
     prompts = {r: (prefix * r) + f" Q{r}: summarize the above in one word. A:" for r in repeats}
+    _guard_context_fit(model, prompts, args.max_model_len)
     sampling = SamplingParams(max_tokens=1, temperature=0.0)
     common: dict[str, Any] = dict(
         model=model,
@@ -160,7 +166,7 @@ def run_model(model: str, prefix: str, repeats: list[int], args: Any) -> dict[st
             "cache_addr": args.cache_addr,
             "model_id": model,
             "block_tokens": args.block_tokens,
-            "deadline_ms": 2000,
+            "deadline_ms": args.deadline_ms,
             "tenant_id": "phase45-dist",
         },
     )
@@ -186,6 +192,30 @@ def run_model(model: str, prefix: str, repeats: list[int], args: Any) -> dict[st
             "warm_vs_baseline_pct": None if base_p50 == 0 else round(100.0 * (base_p50 - warm_p50) / base_p50, 1),
         })
     return {"model": model, "max_model_len": args.max_model_len, "results": results}
+
+
+def _guard_context_fit(model: str, prompts: dict[int, str], max_model_len: int) -> None:
+    """Fail fast (BEFORE the multi-minute model load) if any repeat level overflows the context.
+
+    Without this, the overflow only surfaces mid-sweep on a billed GPU as a per-request vLLM
+    error after weights are already downloaded and loaded. Best-effort: if the tokenizer can't
+    be fetched standalone, skip the guard and let vLLM enforce the limit.
+    """
+    try:
+        from transformers import AutoTokenizer
+
+        tok = AutoTokenizer.from_pretrained(model)
+    except Exception as exc:  # offline box, gated repo, etc.
+        print(f"[guard] could not pre-load tokenizer for {model} ({exc}); skipping context check")
+        return
+    for r, prompt in sorted(prompts.items()):
+        n = len(tok.encode(prompt))
+        if n > max_model_len:
+            raise SystemExit(
+                f"[guard] {model}: --repeats {r} -> {n} prompt tokens > --max-model-len "
+                f"{max_model_len}. Lower the top rung (e.g. drop {r}) or raise --max-model-len."
+            )
+        print(f"[guard] {model}: repeats={r} -> {n} tokens (fits {max_model_len})")
 
 
 def _tokenizer(llm: Any) -> Any:

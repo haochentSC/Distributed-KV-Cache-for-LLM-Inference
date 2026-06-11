@@ -34,6 +34,13 @@ def main() -> None:
     parser.add_argument("--model", default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
     parser.add_argument("--cache-addr", default="localhost:50051")
     parser.add_argument("--block-tokens", type=int, default=16)
+    parser.add_argument("--tensor-parallel-size", type=int, default=1,
+                        help="GPU ranks. The TP gate (ADR 0032): probe with 4 on the multi-GPU box "
+                             "and confirm per-rank KV heads = num_kv_heads/4 and a DISTINCT "
+                             "shard_model_id per rank before any benchmark spend.")
+    parser.add_argument("--max-model-len", type=int, default=0,
+                        help="Cap the context window (0 = model default). A 32B model's default "
+                             "config can exceed the per-rank KV budget on 4x A6000 — cap it here.")
     parser.add_argument("--gpu-mem-util", type=float, default=0.55,
                         help="Conservative on an 8 GB 3080; shared GPU memory is not usable VRAM under WSL2/CUDA.")
     parser.add_argument("--out", default="kv_layout_probe.json")
@@ -63,12 +70,16 @@ def main() -> None:
         },
     )
 
-    llm = LLM(
+    llm_kwargs: dict = dict(
         model=args.model,
         enable_prefix_caching=False,
         gpu_memory_utilization=args.gpu_mem_util,
+        tensor_parallel_size=args.tensor_parallel_size,
         kv_transfer_config=ktc,
     )
+    if args.max_model_len > 0:
+        llm_kwargs["max_model_len"] = args.max_model_len
+    llm = LLM(**llm_kwargs)
     # One short generation drives register_kv_caches + start_load_kv + save_kv_layer.
     prompt = "Explain how a cache miss differs from a correctness violation. " * 8
     llm.generate([prompt], SamplingParams(max_tokens=1, temperature=0.0))

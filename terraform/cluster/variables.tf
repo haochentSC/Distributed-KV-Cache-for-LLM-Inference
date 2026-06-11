@@ -97,6 +97,18 @@ variable "gpu_root_gb" {
   default     = 120
 }
 
+variable "gpu_subnet_cidr" {
+  description = "CIDR for the GPU node's own public subnet (created only when gpu_count > 0). The GPU sits in a different AZ than the cluster because single-GPU Spot capacity is AZ-dependent (us-east-1a had none on 2026-06-10); cross-AZ adds <1 ms to cache RPCs, which only disadvantages the cache — the honest direction."
+  type        = string
+  default     = "10.0.2.0/24"
+}
+
+variable "gpu_az" {
+  description = "AZ for the GPU subnet. Empty = the region's second AZ (the cluster uses the first). Override if Spot capacity for the GPU type lives elsewhere (the InsufficientInstanceCapacity error names the AZs that have it)."
+  type        = string
+  default     = ""
+}
+
 variable "gpu_ami_id" {
   description = "Explicit AMI id for the GPU node (an AWS Deep Learning AMI with NVIDIA driver + PyTorch). Leave empty to resolve gpu_ami_ssm_param instead. Set this if the SSM path has drifted."
   type        = string

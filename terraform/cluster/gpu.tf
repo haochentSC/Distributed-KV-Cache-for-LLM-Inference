@@ -7,7 +7,26 @@
 #
 # It needs no IAM (no ECR/S3 — vLLM + our connector are installed via pip in the runbook) and no
 # new cache-side rule: aws_security_group.cache already allows gRPC 50051 from the whole vpc_cidr,
-# and this node sits in the same public subnet.
+# which covers the GPU's own subnet below.
+#
+# The GPU gets its OWN subnet in a DIFFERENT AZ: g5.2xlarge Spot capacity is AZ-dependent
+# (us-east-1a had none on 2026-06-10; AWS named 1b/c/d/f), and the cluster subnet is pinned to
+# the first AZ. Cross-AZ adds <1 ms to cache RPCs — a conservative bias against the cache.
+
+resource "aws_subnet" "gpu" {
+  count                   = var.gpu_count > 0 ? 1 : 0
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.gpu_subnet_cidr
+  availability_zone       = var.gpu_az != "" ? var.gpu_az : data.aws_availability_zones.available.names[1]
+  map_public_ip_on_launch = true
+  tags                    = { Name = "kvcache-gpu" }
+}
+
+resource "aws_route_table_association" "gpu" {
+  count          = var.gpu_count > 0 ? 1 : 0
+  subnet_id      = aws_subnet.gpu[0].id
+  route_table_id = aws_route_table.public.id
+}
 
 # Deep Learning AMI (NVIDIA driver + PyTorch preinstalled). Resolved from SSM only when a GPU node
 # is actually requested and no explicit gpu_ami_id override is given — so gpu_count = 0 does no
@@ -47,7 +66,7 @@ resource "aws_instance" "gpu" {
   count                  = var.gpu_count
   ami                    = var.gpu_ami_id != "" ? var.gpu_ami_id : one(data.aws_ssm_parameter.dlami[*].value)
   instance_type          = var.gpu_instance_type
-  subnet_id              = aws_subnet.public.id
+  subnet_id              = aws_subnet.gpu[0].id
   vpc_security_group_ids = [aws_security_group.gpu[0].id]
   key_name               = var.key_name != "" ? var.key_name : null
 

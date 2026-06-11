@@ -32,10 +32,17 @@ a 7-8B model (the pinned-memory env ADR 0031 said would flip the cache net-posit
 path stays in code but is **deferred** to an AWS-sales quota or a GPU-specialized cloud (Lambda/RunPod/Modal;
 the TP keying is provider-agnostic). The "why AWS" story: AWS for the *distributed* system (real failure
 domains, Spot-as-chaos, S3 cold tier, IaC) — not for scale; GPU compute belongs on a GPU cloud.
-**Deferred to one paid window — see the runbook `docs/benchmarks/aws-batch-runbook.md`:** the single-GPU
-TTFT run, cold-tier round-trip verify, AWS chaos (`aws-chaos.sh`, `tc`/`iptables`), CloudWatch alarms,
-and the 5a/5b cluster re-run (bring up cache nodes as `c7i.large` to dodge the t3 throttle).
-**Remember to `terraform destroy` the AWS cluster when not actively testing — it bills hourly (the GPU node especially).**
+**The paid window EXECUTED 2026-06-10/11 (`docs/benchmarks/phase45-distributed-gpu.md`) — ~$2-3 total.**
+The headline is **measured**: TTFT crossover on a real GPU (g6.2xlarge 1× L4 — g5/A10G had zero Spot
+capacity region-wide) — the cache loses 5% at trivial prefixes, breaks even ~1k tokens, **wins +7.6% @ 2k
+/ +10.9% @ 4k tokens** (116 ms off a 1,070 ms TTFT, cross-AZ). ShareGPT replay on the live cluster:
+**32.7% hit rate**, 0 violations, p50 62 ms. Chaos (latency / etcd partition / real node kill): all
+**0 violations**; the node-loss alarm fires after the `treat_missing_data="breaching"` fix. The 5a/5b
+cluster re-run **reproduces the local Pareto frontier**. Fixes landed: container `AWS_REGION` (the cold
+tier was dead without it) + `GOMEMLIMIT` (t3.small OOM), `cache_max_bytes` 1.0 GB, AZ-independent GPU
+subnet (`gpu_az`). Known limitation: the spill pipeline sheds under burst eviction (drop-over-stall by
+design; ~40-60 S3 PUT/s vs hundreds/s bursts). **Next: Phase 6 (polish & story).**
+**The cluster is DESTROYED. Re-applying bills hourly — destroy again after any test.**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->

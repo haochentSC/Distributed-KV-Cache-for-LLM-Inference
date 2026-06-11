@@ -16,8 +16,9 @@ sharegpt.json
 
 # Terraform
 **/.terraform/*
-# saved terraform plan dumps (local scratch; regenerate with terraform plan)
+# saved terraform plan dumps and plan files (local scratch; may embed sensitive values)
 terraform/cluster/plan-*.txt
+terraform/cluster/tfplan-*
 *.tfstate
 *.tfstate.*
 # *.tfvars may contain secrets; commit *.tfvars.example instead

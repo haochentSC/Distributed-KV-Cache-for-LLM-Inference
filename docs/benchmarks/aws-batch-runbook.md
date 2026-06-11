@@ -1,5 +1,12 @@
 # AWS paid-batch runbook — distributed GPU TTFT + on-cluster validations
 
+> **EXECUTED 2026-06-10/11 — results + findings in [`phase45-distributed-gpu.md`](phase45-distributed-gpu.md).**
+> Highlights vs this plan: g5.2xlarge had zero Spot capacity region-wide → ran on **g6.2xlarge (1× L4)**
+> via the new `gpu_az`/`aws_subnet.gpu` (capacity is AZ-dependent — check `aws ec2
+> get-spot-placement-scores` first); c7i.large was reclaimed-for-capacity → t3.small + the
+> `AWS_REGION`/`GOMEMLIMIT`/1.0 GB fixes held up fine; the TTFT crossover landed at ~1k tokens
+> (+10.9 % at 4k). Keep the steps below for a re-run.
+
 The single paid window that produces the headline `[measured]` TTFT number (ADR 0031/0032) and
 clears the remaining on-cluster validations. Everything here was prepped and locally verified
 beforehand; this window is **execution only**, kept short to limit spend.

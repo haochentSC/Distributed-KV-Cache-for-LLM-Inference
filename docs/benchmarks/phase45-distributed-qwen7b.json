@@ -1,0 +1,86 @@
+{
+  "phase": "4.5-distributed",
+  "tensor_parallel_size": 1,
+  "cache_addr": "10.0.1.23:50051",
+  "workload": "system_prompt",
+  "block_tokens": 16,
+  "runs": 8,
+  "models": [
+    {
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "max_model_len": 8192,
+      "results": [
+        {
+          "repeat": 4,
+          "prompt_tokens": 269,
+          "baseline_ms": {
+            "p50": 104.44358100005502,
+            "p95": 391.9583329999341,
+            "p99": 391.9583329999341,
+            "mean": 140.05865400001483
+          },
+          "external_cold_ms": {
+            "p50": 488.66034899992883,
+            "p95": 488.66034899992883,
+            "p99": 488.66034899992883,
+            "mean": 488.66034899992883
+          },
+          "external_warm_ms": {
+            "p50": 110.01986400003716,
+            "p95": 124.1070779999518,
+            "p99": 124.1070779999518,
+            "mean": 111.52058512499252
+          },
+          "warm_vs_baseline_pct": -5.3
+        },
+        {
+          "repeat": 8,
+          "prompt_tokens": 525,
+          "baseline_ms": {
+            "p50": 171.62808800003404,
+            "p95": 178.4798099999989,
+            "p99": 178.4798099999989,
+            "mean": 170.78195324998546
+          },
+          "external_cold_ms": {
+            "p50": 235.16080799993233,
+            "p95": 235.16080799993233,
+            "p99": 235.16080799993233,
+            "mean": 235.16080799993233
+          },
+          "external_warm_ms": {
+            "p50": 172.5209049999421,
+            "p95": 173.1401790000291,
+            "p99": 173.1401790000291,
+            "mean": 172.23815412501153
+          },
+          "warm_vs_baseline_pct": -0.5
+        },
+        {
+          "repeat": 16,
+          "prompt_tokens": 1038,
+          "baseline_ms": {
+            "p50": 282.43741500000397,
+            "p95": 283.19150300001183,
+            "p99": 283.19150300001183,
+            "mean": 281.48812737501316
+          },
+          "external_cold_ms": {
+            "p50": 461.29780199999004,
+            "p95": 461.29780199999004,
+            "p99": 461.29780199999004,
+            "mean": 461.29780199999004
+          },
+          "external_warm_ms": {
+            "p50": 283.01322699996945,
+            "p95": 307.8850089999605,
+            "p99": 307.8850089999605,
+            "mean": 285.8776164999739
+          },
+          "warm_vs_baseline_pct": -0.2
+        }
+      ]
+    }
+  ],
+  "notes": "Wall-clock one-token latency as TTFT proxy. warm_vs_baseline_pct>0 = cache wins. Shared prefix is cached; each request adds a short unique suffix. Sweep --models for the TTFT-vs-model-size scaling curve (ADR 0031: the deficit closes as the model grows)."
+}

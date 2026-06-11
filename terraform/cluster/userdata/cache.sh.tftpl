@@ -25,7 +25,12 @@ set -euo pipefail
 TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 120")
 INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $${TOKEN}" http://169.254.169.254/latest/meta-data/instance-id)
 PRIVATE_IP=$(curl -s -H "X-aws-ec2-metadata-token: $${TOKEN}" http://169.254.169.254/latest/meta-data/local-ipv4)
+# AWS_REGION: the SDK inside the container cannot resolve a region on its own (no env, no shared
+# config), and an empty region breaks every cold-tier S3 call with "Invalid region" (2026-06-10).
+# GOMEMLIMIT keeps the Go GC from letting RSS run to ~2x max-bytes and OOMing a 2 GB t3.small.
 exec docker run --rm --name cache-server --network host \
+  -e AWS_REGION=${region} \
+  -e GOMEMLIMIT=1400MiB \
   --log-driver=awslogs \
   --log-opt awslogs-region=${region} \
   --log-opt awslogs-group=${log_group} \

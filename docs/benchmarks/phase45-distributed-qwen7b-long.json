@@ -1,0 +1,63 @@
+{
+  "phase": "4.5-distributed",
+  "tensor_parallel_size": 1,
+  "cache_addr": "10.0.1.23:50051",
+  "workload": "system_prompt",
+  "block_tokens": 16,
+  "runs": 8,
+  "models": [
+    {
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "max_model_len": 8192,
+      "results": [
+        {
+          "repeat": 32,
+          "prompt_tokens": 2062,
+          "baseline_ms": {
+            "p50": 547.7633340000239,
+            "p95": 828.6825779999845,
+            "p99": 828.6825779999845,
+            "mean": 582.3992697500131
+          },
+          "external_cold_ms": {
+            "p50": 853.8701480000555,
+            "p95": 853.8701480000555,
+            "p99": 853.8701480000555,
+            "mean": 853.8701480000555
+          },
+          "external_warm_ms": {
+            "p50": 506.2870289999637,
+            "p95": 507.5036190000901,
+            "p99": 507.5036190000901,
+            "mean": 505.6139860000144
+          },
+          "warm_vs_baseline_pct": 7.6
+        },
+        {
+          "repeat": 64,
+          "prompt_tokens": 4110,
+          "baseline_ms": {
+            "p50": 1070.307542999899,
+            "p95": 1076.4026909999984,
+            "p99": 1076.4026909999984,
+            "mean": 1070.7311212499776
+          },
+          "external_cold_ms": {
+            "p50": 1733.0154429999993,
+            "p95": 1733.0154429999993,
+            "p99": 1733.0154429999993,
+            "mean": 1733.0154429999993
+          },
+          "external_warm_ms": {
+            "p50": 954.0832940000428,
+            "p95": 976.7361609999625,
+            "p99": 976.7361609999625,
+            "mean": 955.7204701250015
+          },
+          "warm_vs_baseline_pct": 10.9
+        }
+      ]
+    }
+  ],
+  "notes": "Wall-clock one-token latency as TTFT proxy. warm_vs_baseline_pct>0 = cache wins. Shared prefix is cached; each request adds a short unique suffix. Sweep --models for the TTFT-vs-model-size scaling curve (ADR 0031: the deficit closes as the model grows)."
+}

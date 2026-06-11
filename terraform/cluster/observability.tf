@@ -38,6 +38,10 @@ resource "aws_cloudwatch_metric_alarm" "etcd_health" {
   dimensions          = { InstanceId = aws_instance.etcd[count.index].id }
   alarm_actions       = [aws_sns_topic.alarms.arn]
   ok_actions          = [aws_sns_topic.alarms.arn]
+  # A TERMINATED instance emits no datapoints at all — with the default ("missing") the alarm
+  # silently stays OK through a node loss (observed in the 2026-06-10 chaos kill). Breaching
+  # makes "no data" itself the failure signal, which is the semantics a liveness alarm wants.
+  treat_missing_data = "breaching"
 }
 
 # Cache node health — a Spot reclaim/crash shows here; failover keeps correctness, but a fleet-wide
@@ -55,4 +59,6 @@ resource "aws_cloudwatch_metric_alarm" "cache_health" {
   evaluation_periods  = 2
   dimensions          = { InstanceId = aws_instance.cache[count.index].id }
   alarm_actions       = [aws_sns_topic.alarms.arn]
+  # See etcd_health: missing data = dead node = breaching, not OK.
+  treat_missing_data = "breaching"
 }

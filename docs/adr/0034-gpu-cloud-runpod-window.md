@@ -1,6 +1,6 @@
 # ADR 0034 — GPU-cloud window on RunPod (Option B); Session A results + Session B handoff
 
-- **Status:** accepted (Session A executed; Session B pending)
+- **Status:** accepted (Session A executed 2026-06-11; Session B executed 2026-06-12)
 - **Date:** 2026-06-11
 - **Deciders:** HC (+ Claude)
 - **Builds on:** ADR 0031 (TTFT inequality / environmental bottlenecks), ADR 0032 (TP shard keying),
@@ -45,14 +45,23 @@ requires **compute-bound prefill** (L4-class serving GPU), not flagship throughp
 Artifacts: `docs/benchmarks/phase45-gpu-cloud.md`, JSONs under `docs/benchmarks/phase45-longcontext-*`,
 `runpod-demo-serve.typescript`.
 
-## Session B (pending)
+## Session B results (executed 2026-06-12)
 
-4× A6000 or A40; Qwen2.5-32B-Instruct bf16, `--tensor-parallel-size 4`. Success = probe gate
-(`tp_world=4`, 2 KV heads/rank, distinct `shard_model_id` per rank) + driver run with save/load
-active and **0 correctness warnings**. TTFT delta is secondary; engineering completeness is the
-deliverable (ADR 0032).
+4× A40 (PCIe), Qwen2.5-32B-Instruct bf16, TP=4, ~1.5 h, ~$3–4. Probe gate passed (`tp_world=4`,
+2 KV heads/rank, `block_axis=1`). **The first benchmark run then failed the correctness gate** —
+only rank 0's shard survived in the cache (server hit:miss exactly 1:3) — exposing a server-side
+keying bug: the store keyed by block hash alone, so the four rank-agnostic shard ids clobbered one
+slot last-writer-wins. Fixed by namespacing store keys with `model_id` (**ADR 0035**) and
+re-validated clean: load active on all 4 ranks, 9,280 hits / 0 misses, 512 writes = 128 blocks ×
+4 ranks exactly once, zero correctness warnings. TTFT remained negative on A40 (−25%..−52%,
+consistent with ADR 0031's hot-path analysis) — engineering completeness was the deliverable.
 
-Handoff: `docs/benchmarks/runpod-gpu-window-plan.md` § “Next session handoff”.
+Operational: the first pod (plain PyTorch template) had a CUDA 12.7 driver — too old for the
+cu130 torch vLLM 0.22.1 pins; redeploy with the **CUDA 13.0 template**. That template does not
+inject the account SSH key (add via Web Terminal).
+
+Artifacts: `phase45-tp4-qwen32b.json`, `runpod-tp4-kv-layout-probe.json`,
+`phase45-gpu-cloud.md` § Session B.
 
 ## Consequences
 

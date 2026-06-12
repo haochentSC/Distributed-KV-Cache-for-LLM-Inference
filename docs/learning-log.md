@@ -18,6 +18,38 @@
 
 ## Phase 4.5 - End-to-end GPU TTFT benchmark
 
+### 2026-06-12 - RunPod Session B: the TP=4 gate caught a real keying bug (ADR 0035)
+**Phase:** 4.5-B (RunPod Option B, Session B; ADRs 0034/0035)
+**What I was doing:** TP=4 / Qwen2.5-32B keying validation on 4× A40 — probe gate, then the
+distributed driver against a loopback cache-server.
+**What I learned / what broke:**
+- **The probe gate passed but the run failed silently:** save active on all 4 ranks, load active on
+  rank 0 only; server batch_fetch hit:miss EXACTLY 1:3. A shard-presence probe
+  (`connector/tools/diag_shard_presence.py`) showed every block under ONE shard key, versions in
+  multiples of 4 — four writers clobbering one slot.
+- **Root cause was the server, not the connector:** the store mapped `BlockHash -> Entry` with
+  `model_id` as a read guard, not part of the key. ADR 0032 keeps block hashes rank-agnostic *by
+  design* (the scheduler checks presence under rank 0 for everyone), so the four `#tpR/4` shard ids
+  necessarily collide. Worse than degradation: the stamped hash matches across ranks, so the
+  ADR 0016 guard would pass while serving ANOTHER rank's KV shard — silent corruption.
+- **Fix:** namespace the store key — `storeKey = SHA-256(model_id ‖ wire_hash)` inside the store;
+  `Entry.WireHash` keeps the wire identity for spill/replication. Re-validated on hardware: all 4
+  ranks load, 9,280 hits / 0 misses, 512 writes = 128 blocks × 4 ranks exactly once.
+- **"Zero warnings" ≠ correct.** The driver doesn't diff outputs and the client saw no errors;
+  only the SERVER's per-key metrics exposed the 1:3 ratio. Validation gates must observe the
+  server's view.
+- **RunPod ops:** template CUDA version is a hard gate (vLLM 0.22.1 pins cu130 torch → needs a
+  CUDA ≥ 13.0 host driver; the plain PyTorch template landed on 12.7); the CUDA-13 template doesn't
+  inject the account SSH key (Web Terminal + authorized_keys, split long pastes); conda lives at
+  /opt/conda (no PEP 668); `pkill -f cache-server` over SSH matches its own command line.
+**Why it matters / what I'd redo:** This is exactly what the ADR 0032 gate exists for — and the bug
+was one layer deeper than the gate was aimed at. The single-model assumption hid in the store since
+Phase 1 and every earlier benchmark was blind to it. I'd add a multi-model store test from day one
+whenever a key has a "guard" field — a guard on read with last-writer-wins on write is a collision
+waiting for a workload that shares hashes.
+**Links:** ADR 0035, ADR 0032/0016, `docs/benchmarks/phase45-gpu-cloud.md` § Session B,
+`phase45-tp4-qwen32b.json`, `runpod-tp4-kv-layout-probe.json`.
+
 ### 2026-06-11 - RunPod Session A: no 32k crossover on A100; crossover is GPU-class dependent
 **Phase:** 4.5-B (RunPod Option B, Session A; ADR 0034)
 **What I was doing:** Executed the RunPod long-context sweep (7B, 1k→32k), 14B scaling check, and

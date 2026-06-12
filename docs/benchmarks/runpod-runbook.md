@@ -122,7 +122,17 @@ Re-run steps below only for reproduction.
 
 5. **TERMINATE the pod.** Console shows zero pods.
 
-## Session B — TP=4 / 32B (4× A6000 or A40, ~1–1.5 h) — PENDING (next session)
+## Session B — TP=4 / 32B (4× A6000 or A40, ~1–1.5 h) — EXECUTED 2026-06-12
+
+> Ran on 4× A40, pod `69.30.85.75:22046` (terminated). **Probe gate passed; the first benchmark
+> run then caught a real server keying bug** (store keyed by hash alone → TP shard clobbering;
+> fixed + re-validated in-session, ADR 0035). Final: load/save active on ALL 4 ranks, 9,280 hits /
+> 0 misses, zero correctness warnings. Artifacts: `phase45-tp4-qwen32b.json`,
+> `runpod-tp4-kv-layout-probe.json`. Gotchas hit: (1) plain PyTorch template landed on a CUDA 12.7
+> driver — too old for vLLM 0.22.1's cu130 torch; use the **CUDA 13.0 template**; (2) that template
+> does not inject the account SSH key (append via Web Terminal — it force-wraps pasted lines, split
+> long lines into shell vars); (3) the CUDA-13 template uses conda — `export PATH=/opt/conda/bin:$PATH`
+> in non-interactive SSH, no PEP 668 flag needed. Steps below kept for reproduction.
 
 1. Common setup as above (16 GiB `-max-bytes` is plenty: repeats ≤ 32 ≈ 2.1k tokens × ~256 KB
    KV/token across ranks ≈ 0.5 GB).

@@ -6,7 +6,7 @@ cost-aware + fair eviction), integrated with vLLM and deployed on AWS via Terraf
 
 **Source of truth:** [`docs/00-project-plan.md`](docs/00-project-plan.md) — strategy, phases,
 decisions log. Don't duplicate it here. Decisions are recorded as ADRs in `docs/adr/`.
-**Current phase: Phase 4.5-B (RunPod Session B pending) → Phase 6 polish.**
+**Current phase: Phase 6 (polish & story) — all benchmark phases COMPLETE.**
 Phases 1–4 are done: the CPU-only core (server, store, block-hash, load generator, Python connector
 libs), the consistent-hash ring + client routing, etcd-coordinated RF=2 async replication with
 implicit promotion and graceful/Spot drain (ADRs 0021–0023), and the Phase 4 LRU+watermark eviction,
@@ -44,10 +44,15 @@ subnet (`gpu_az`). Known limitation: the spill pipeline sheds under burst evicti
 design; ~40-60 S3 PUT/s vs hundreds/s bursts). **RunPod Option B (ADR 0034, 2026-06-11): Session A
 EXECUTED** — long-context curve + serving demo on 1× A100 80GB; **no 32k crossover** (A100 prefills
 too fast; warm path Python-bound); 14B *worse* than 7B at same tokens (KV-bytes/FLOPs). AWS L4
-**+10.9% @ 4k** stays the resume headline (`phase45-gpu-cloud.md`). **Session B pending:** TP=4 /
-Qwen2.5-32B on 4× A6000 — handoff [`runpod-gpu-window-plan.md`](docs/benchmarks/runpod-gpu-window-plan.md).
-**Next: finish Session B, then Phase 6 (polish & story).**
-**AWS cluster DESTROYED; terminate RunPod pods after each session.**
+**+10.9% @ 4k** stays the resume headline (`phase45-gpu-cloud.md`). **Session B EXECUTED 2026-06-12**
+(4× A40, TP=4 / Qwen2.5-32B): probe gate passed, then the benchmark **caught a real server bug** — the
+store keyed entries by block hash alone, so the four rank-agnostic shard ids clobbered one map slot
+last-writer-wins (silent-corruption risk: the stamped hash matches across ranks, so the ADR 0016 guard
+passes while serving another rank's shard). **Fixed (ADR 0035):** store keys namespaced by model
+(`storeKey = SHA-256(model_id ‖ wire hash)`; `Entry.WireHash` kept for spill/replication), re-validated
+on hardware — load/save active on all 4 ranks, 9,280 hits / 0 misses, 512 writes = 128 blocks × 4 ranks
+exactly once. TP keying (ADR 0032) validated end-to-end. **Next: Phase 6 (polish & story).**
+**AWS cluster DESTROYED; all RunPod pods TERMINATED.**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->

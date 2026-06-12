@@ -1,8 +1,9 @@
-# Phase 4.5-B handoff — RunPod GPU window (Session A done; Session B next)
+# Phase 4.5-B handoff — RunPod GPU window (BOTH SESSIONS EXECUTED)
 
-> **Session A: EXECUTED 2026-06-11** — results in [`phase45-gpu-cloud.md`](phase45-gpu-cloud.md),
-> ADR 0034. **Session B: PENDING** — this doc is the pickup checklist for the next session.
-> Budget remaining: ~$16 of the ~$20 cap (Session A ≈ $3–4).
+> **Session A: EXECUTED 2026-06-11. Session B: EXECUTED 2026-06-12** — results in
+> [`phase45-gpu-cloud.md`](phase45-gpu-cloud.md), ADR 0034; Session B caught + fixed a real
+> store-keying bug (ADR 0035). Total spend ≈ $7–8 of the ~$20 cap. This doc is kept as the
+> historical plan; nothing below is pending.
 
 ## What Session A delivered (do not re-run)
 

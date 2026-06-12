@@ -1,0 +1,6228 @@
+{
+  "probe": "register_kv_caches",
+  "data": {
+    "block_tokens": 16,
+    "tp_rank": 1,
+    "tp_world": 4,
+    "layers": {
+      "model.layers.0.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.1.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.2.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.3.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.4.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.5.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.6.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.7.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.8.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.9.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.10.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.11.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.12.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.13.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.14.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.15.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.16.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.17.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.18.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.19.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.20.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.21.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.22.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.23.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.24.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.25.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.26.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.27.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.28.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.29.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.30.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.31.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.32.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.33.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.34.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.35.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.36.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.37.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.38.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.39.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.40.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.41.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.42.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.43.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.44.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.45.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.46.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.47.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.48.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.49.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.50.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.51.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.52.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.53.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.54.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.55.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.56.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.57.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.58.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.59.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.60.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.61.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.62.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "model.layers.63.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      }
+    },
+    "inferred_layout": {
+      "block_axis": 1,
+      "num_blocks": 22900,
+      "block_size": 16
+    },
+    "kv_cache_config": {
+      "type": "KVCacheConfig",
+      "attrs": {
+        "has_mamba_layers": false,
+        "kv_cache_groups": {
+          "type": "list",
+          "len": 1,
+          "head": [
+            {
+              "type": "KVCacheGroupSpec",
+              "attrs": {}
+            }
+          ]
+        },
+        "kv_cache_tensors": {
+          "type": "list",
+          "len": 64,
+          "head": [
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            }
+          ]
+        },
+        "needs_kv_cache_zeroing": false,
+        "num_blocks": 22900
+      }
+    }
+  }
+}
+{
+  "probe": "register_kv_caches",
+  "data": {
+    "block_tokens": 16,
+    "tp_rank": 2,
+    "tp_world": 4,
+    "layers": {
+      "model.layers.0.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.1.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.2.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.3.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.4.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.5.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.6.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.7.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.8.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.9.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.10.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.11.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.12.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.13.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.14.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.15.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.16.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.17.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.18.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.19.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.20.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.21.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.22.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.23.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.24.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.25.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.26.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.27.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.28.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.29.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.30.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.31.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.32.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.33.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.34.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.35.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.36.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.37.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.38.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.39.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.40.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.41.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.42.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.43.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.44.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.45.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.46.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.47.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.48.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.49.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.50.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.51.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.52.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.53.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.54.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.55.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.56.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.57.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.58.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.59.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.60.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.61.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.62.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "model.layers.63.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      }
+    },
+    "inferred_layout": {
+      "block_axis": 1,
+      "num_blocks": 22900,
+      "block_size": 16
+    },
+    "kv_cache_config": {
+      "type": "KVCacheConfig",
+      "attrs": {
+        "has_mamba_layers": false,
+        "kv_cache_groups": {
+          "type": "list",
+          "len": 1,
+          "head": [
+            {
+              "type": "KVCacheGroupSpec",
+              "attrs": {}
+            }
+          ]
+        },
+        "kv_cache_tensors": {
+          "type": "list",
+          "len": 64,
+          "head": [
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            }
+          ]
+        },
+        "needs_kv_cache_zeroing": false,
+        "num_blocks": 22900
+      }
+    }
+  }
+}
+{
+  "probe": "register_kv_caches",
+  "data": {
+    "block_tokens": 16,
+    "tp_rank": 3,
+    "tp_world": 4,
+    "layers": {
+      "model.layers.0.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.1.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.2.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.3.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.4.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.5.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.6.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.7.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.8.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.9.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.10.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.11.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.12.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.13.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.14.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.15.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.16.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.17.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.18.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.19.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.20.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.21.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.22.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.23.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.24.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.25.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.26.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.27.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.28.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.29.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.30.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.31.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.32.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.33.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.34.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.35.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.36.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.37.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.38.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.39.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.40.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.41.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.42.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.43.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.44.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.45.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.46.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.47.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.48.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.49.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.50.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.51.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.52.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.53.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.54.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.55.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.56.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.57.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.58.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.59.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.60.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.61.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.62.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "model.layers.63.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      }
+    },
+    "inferred_layout": {
+      "block_axis": 1,
+      "num_blocks": 22900,
+      "block_size": 16
+    },
+    "kv_cache_config": {
+      "type": "KVCacheConfig",
+      "attrs": {
+        "has_mamba_layers": false,
+        "kv_cache_groups": {
+          "type": "list",
+          "len": 1,
+          "head": [
+            {
+              "type": "KVCacheGroupSpec",
+              "attrs": {}
+            }
+          ]
+        },
+        "kv_cache_tensors": {
+          "type": "list",
+          "len": 64,
+          "head": [
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            }
+          ]
+        },
+        "needs_kv_cache_zeroing": false,
+        "num_blocks": 22900
+      }
+    }
+  }
+}
+{
+  "probe": "register_kv_caches",
+  "data": {
+    "block_tokens": 16,
+    "tp_rank": 0,
+    "tp_world": 4,
+    "layers": {
+      "model.layers.0.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.1.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.2.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.3.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.4.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.5.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.6.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.7.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.8.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.9.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.10.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.11.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.12.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.13.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.14.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.15.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.16.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.17.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.18.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.19.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.20.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.21.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.22.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.23.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.24.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.25.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.26.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.27.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.28.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.29.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.30.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.31.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.32.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.33.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.34.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.35.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.36.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.37.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.38.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.39.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.40.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.41.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.42.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.43.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.44.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.45.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.46.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.47.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.48.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.49.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.50.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.51.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.52.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.53.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.54.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.55.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.56.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.57.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.58.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.59.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.60.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.61.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.62.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "model.layers.63.self_attn.attn": {
+        "type": "Tensor",
+        "shape": [
+          2,
+          22900,
+          16,
+          2,
+          128
+        ],
+        "dtype": "torch.bfloat16",
+        "stride": [
+          93798400,
+          4096,
+          256,
+          128,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      }
+    },
+    "inferred_layout": {
+      "block_axis": 1,
+      "num_blocks": 22900,
+      "block_size": 16
+    },
+    "kv_cache_config": {
+      "type": "KVCacheConfig",
+      "attrs": {
+        "has_mamba_layers": false,
+        "kv_cache_groups": {
+          "type": "list",
+          "len": 1,
+          "head": [
+            {
+              "type": "KVCacheGroupSpec",
+              "attrs": {}
+            }
+          ]
+        },
+        "kv_cache_tensors": {
+          "type": "list",
+          "len": 64,
+          "head": [
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            },
+            {
+              "type": "KVCacheTensor",
+              "attrs": {}
+            }
+          ]
+        },
+        "needs_kv_cache_zeroing": false,
+        "num_blocks": 22900
+      }
+    }
+  }
+}
+{
+  "probe": "start_load_kv.forward_context",
+  "data": {
+    "type": "ForwardContext",
+    "attrs": {
+      "additional_kwargs": {
+        "type": "dict",
+        "keys": []
+      },
+      "all_moe_layers": null,
+      "attn_metadata": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "batch_descriptor": {
+        "type": "BatchDescriptor",
+        "attrs": {
+          "has_lora": false,
+          "num_active_loras": 0,
+          "num_reqs": null,
+          "num_tokens": 96,
+          "uniform": false
+        }
+      },
+      "cudagraph_runtime_mode": {
+        "type": "CUDAGraphMode",
+        "attrs": {
+          "name": "PIECEWISE",
+          "value": 1
+        }
+      },
+      "dp_metadata": null,
+      "moe_layer_index": 0,
+      "no_compile_layers": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "skip_compiled": false,
+      "slot_mapping": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "ubatch_slices": null
+    }
+  }
+}
+{
+  "probe": "start_load_kv.kwargs",
+  "data": {
+    "type": "dict",
+    "keys": []
+  }
+}
+{
+  "probe": "start_load_kv.forward_context",
+  "data": {
+    "type": "ForwardContext",
+    "attrs": {
+      "additional_kwargs": {
+        "type": "dict",
+        "keys": []
+      },
+      "all_moe_layers": null,
+      "attn_metadata": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "batch_descriptor": {
+        "type": "BatchDescriptor",
+        "attrs": {
+          "has_lora": false,
+          "num_active_loras": 0,
+          "num_reqs": null,
+          "num_tokens": 96,
+          "uniform": false
+        }
+      },
+      "cudagraph_runtime_mode": {
+        "type": "CUDAGraphMode",
+        "attrs": {
+          "name": "PIECEWISE",
+          "value": 1
+        }
+      },
+      "dp_metadata": null,
+      "moe_layer_index": 0,
+      "no_compile_layers": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "skip_compiled": false,
+      "slot_mapping": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "ubatch_slices": null
+    }
+  }
+}
+{
+  "probe": "start_load_kv.kwargs",
+  "data": {
+    "type": "dict",
+    "keys": []
+  }
+}
+{
+  "probe": "start_load_kv.forward_context",
+  "data": {
+    "type": "ForwardContext",
+    "attrs": {
+      "additional_kwargs": {
+        "type": "dict",
+        "keys": []
+      },
+      "all_moe_layers": null,
+      "attn_metadata": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "batch_descriptor": {
+        "type": "BatchDescriptor",
+        "attrs": {
+          "has_lora": false,
+          "num_active_loras": 0,
+          "num_reqs": null,
+          "num_tokens": 96,
+          "uniform": false
+        }
+      },
+      "cudagraph_runtime_mode": {
+        "type": "CUDAGraphMode",
+        "attrs": {
+          "name": "PIECEWISE",
+          "value": 1
+        }
+      },
+      "dp_metadata": null,
+      "moe_layer_index": 0,
+      "no_compile_layers": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "skip_compiled": false,
+      "slot_mapping": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "ubatch_slices": null
+    }
+  }
+}
+{
+  "probe": "start_load_kv.kwargs",
+  "data": {
+    "type": "dict",
+    "keys": []
+  }
+}
+{
+  "probe": "start_load_kv.forward_context",
+  "data": {
+    "type": "ForwardContext",
+    "attrs": {
+      "additional_kwargs": {
+        "type": "dict",
+        "keys": []
+      },
+      "all_moe_layers": null,
+      "attn_metadata": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "batch_descriptor": {
+        "type": "BatchDescriptor",
+        "attrs": {
+          "has_lora": false,
+          "num_active_loras": 0,
+          "num_reqs": null,
+          "num_tokens": 96,
+          "uniform": false
+        }
+      },
+      "cudagraph_runtime_mode": {
+        "type": "CUDAGraphMode",
+        "attrs": {
+          "name": "PIECEWISE",
+          "value": 1
+        }
+      },
+      "dp_metadata": null,
+      "moe_layer_index": 0,
+      "no_compile_layers": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "skip_compiled": false,
+      "slot_mapping": {
+        "type": "dict",
+        "keys": [
+          "model.layers.0.self_attn.attn",
+          "model.layers.1.self_attn.attn",
+          "model.layers.2.self_attn.attn",
+          "model.layers.3.self_attn.attn",
+          "model.layers.4.self_attn.attn",
+          "model.layers.5.self_attn.attn",
+          "model.layers.6.self_attn.attn",
+          "model.layers.7.self_attn.attn",
+          "model.layers.8.self_attn.attn",
+          "model.layers.9.self_attn.attn",
+          "model.layers.10.self_attn.attn",
+          "model.layers.11.self_attn.attn",
+          "model.layers.12.self_attn.attn",
+          "model.layers.13.self_attn.attn",
+          "model.layers.14.self_attn.attn",
+          "model.layers.15.self_attn.attn",
+          "model.layers.16.self_attn.attn",
+          "model.layers.17.self_attn.attn",
+          "model.layers.18.self_attn.attn",
+          "model.layers.19.self_attn.attn"
+        ]
+      },
+      "ubatch_slices": null
+    }
+  }
+}
+{
+  "probe": "start_load_kv.kwargs",
+  "data": {
+    "type": "dict",
+    "keys": []
+  }
+}
+{
+  "probe": "save_kv_layer.layer_name",
+  "data": "model.layers.0.self_attn.attn"
+}
+{
+  "probe": "save_kv_layer.layer_name",
+  "data": "model.layers.0.self_attn.attn"
+}
+{
+  "probe": "save_kv_layer.layer_name",
+  "data": "model.layers.0.self_attn.attn"
+}
+{
+  "probe": "save_kv_layer.kv_layer",
+  "data": {
+    "type": "Tensor",
+    "shape": [
+      2,
+      22900,
+      16,
+      2,
+      128
+    ],
+    "dtype": "torch.bfloat16",
+    "stride": [
+      93798400,
+      4096,
+      256,
+      128,
+      1
+    ],
+    "device": "cuda:1",
+    "is_contiguous": true
+  }
+}
+{
+  "probe": "save_kv_layer.kv_layer",
+  "data": {
+    "type": "Tensor",
+    "shape": [
+      2,
+      22900,
+      16,
+      2,
+      128
+    ],
+    "dtype": "torch.bfloat16",
+    "stride": [
+      93798400,
+      4096,
+      256,
+      128,
+      1
+    ],
+    "device": "cuda:0",
+    "is_contiguous": true
+  }
+}
+{
+  "probe": "save_kv_layer.kv_layer",
+  "data": {
+    "type": "Tensor",
+    "shape": [
+      2,
+      22900,
+      16,
+      2,
+      128
+    ],
+    "dtype": "torch.bfloat16",
+    "stride": [
+      93798400,
+      4096,
+      256,
+      128,
+      1
+    ],
+    "device": "cuda:2",
+    "is_contiguous": true
+  }
+}
+{
+  "probe": "save_kv_layer.attn_metadata",
+  "data": {
+    "type": "FlashAttentionMetadata",
+    "attrs": {
+      "block_table": {
+        "type": "Tensor",
+        "shape": [
+          1,
+          512
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          512,
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "causal": true,
+      "common_prefix_len": 0,
+      "cu_prefix_query_lens": null,
+      "dcp_context_kv_lens": null,
+      "max_dcp_context_kv_len": 0,
+      "max_num_splits": 0,
+      "max_query_len": 90,
+      "max_seq_len": 90,
+      "num_actual_tokens": 90,
+      "prefix_kv_lens": null,
+      "prefix_scheduler_metadata": null,
+      "query_start_loc": {
+        "type": "Tensor",
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "scheduler_metadata": null,
+      "seq_lens": {
+        "type": "Tensor",
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "slot_mapping": {
+        "type": "Tensor",
+        "shape": [
+          96
+        ],
+        "dtype": "torch.int64",
+        "stride": [
+          1
+        ],
+        "device": "cuda:1",
+        "is_contiguous": true
+      },
+      "suffix_kv_lens": null,
+      "use_cascade": false
+    }
+  }
+}
+{
+  "probe": "save_kv_layer.attn_metadata",
+  "data": {
+    "type": "FlashAttentionMetadata",
+    "attrs": {
+      "block_table": {
+        "type": "Tensor",
+        "shape": [
+          1,
+          512
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          512,
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "causal": true,
+      "common_prefix_len": 0,
+      "cu_prefix_query_lens": null,
+      "dcp_context_kv_lens": null,
+      "max_dcp_context_kv_len": 0,
+      "max_num_splits": 0,
+      "max_query_len": 90,
+      "max_seq_len": 90,
+      "num_actual_tokens": 90,
+      "prefix_kv_lens": null,
+      "prefix_scheduler_metadata": null,
+      "query_start_loc": {
+        "type": "Tensor",
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "scheduler_metadata": null,
+      "seq_lens": {
+        "type": "Tensor",
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "slot_mapping": {
+        "type": "Tensor",
+        "shape": [
+          96
+        ],
+        "dtype": "torch.int64",
+        "stride": [
+          1
+        ],
+        "device": "cuda:0",
+        "is_contiguous": true
+      },
+      "suffix_kv_lens": null,
+      "use_cascade": false
+    }
+  }
+}
+{
+  "probe": "save_kv_layer.attn_metadata",
+  "data": {
+    "type": "FlashAttentionMetadata",
+    "attrs": {
+      "block_table": {
+        "type": "Tensor",
+        "shape": [
+          1,
+          512
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          512,
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "causal": true,
+      "common_prefix_len": 0,
+      "cu_prefix_query_lens": null,
+      "dcp_context_kv_lens": null,
+      "max_dcp_context_kv_len": 0,
+      "max_num_splits": 0,
+      "max_query_len": 90,
+      "max_seq_len": 90,
+      "num_actual_tokens": 90,
+      "prefix_kv_lens": null,
+      "prefix_scheduler_metadata": null,
+      "query_start_loc": {
+        "type": "Tensor",
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "scheduler_metadata": null,
+      "seq_lens": {
+        "type": "Tensor",
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "slot_mapping": {
+        "type": "Tensor",
+        "shape": [
+          96
+        ],
+        "dtype": "torch.int64",
+        "stride": [
+          1
+        ],
+        "device": "cuda:2",
+        "is_contiguous": true
+      },
+      "suffix_kv_lens": null,
+      "use_cascade": false
+    }
+  }
+}
+{
+  "probe": "save_kv_layer.kwargs",
+  "data": {
+    "type": "dict",
+    "keys": []
+  }
+}
+{
+  "probe": "save_kv_layer.kwargs",
+  "data": {
+    "type": "dict",
+    "keys": []
+  }
+}
+{
+  "probe": "save_kv_layer.kwargs",
+  "data": {
+    "type": "dict",
+    "keys": []
+  }
+}
+{
+  "probe": "save_kv_layer.layer_name",
+  "data": "model.layers.0.self_attn.attn"
+}
+{
+  "probe": "save_kv_layer.kv_layer",
+  "data": {
+    "type": "Tensor",
+    "shape": [
+      2,
+      22900,
+      16,
+      2,
+      128
+    ],
+    "dtype": "torch.bfloat16",
+    "stride": [
+      93798400,
+      4096,
+      256,
+      128,
+      1
+    ],
+    "device": "cuda:3",
+    "is_contiguous": true
+  }
+}
+{
+  "probe": "save_kv_layer.attn_metadata",
+  "data": {
+    "type": "FlashAttentionMetadata",
+    "attrs": {
+      "block_table": {
+        "type": "Tensor",
+        "shape": [
+          1,
+          512
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          512,
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "causal": true,
+      "common_prefix_len": 0,
+      "cu_prefix_query_lens": null,
+      "dcp_context_kv_lens": null,
+      "max_dcp_context_kv_len": 0,
+      "max_num_splits": 0,
+      "max_query_len": 90,
+      "max_seq_len": 90,
+      "num_actual_tokens": 90,
+      "prefix_kv_lens": null,
+      "prefix_scheduler_metadata": null,
+      "query_start_loc": {
+        "type": "Tensor",
+        "shape": [
+          2
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "scheduler_metadata": null,
+      "seq_lens": {
+        "type": "Tensor",
+        "shape": [
+          1
+        ],
+        "dtype": "torch.int32",
+        "stride": [
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "slot_mapping": {
+        "type": "Tensor",
+        "shape": [
+          96
+        ],
+        "dtype": "torch.int64",
+        "stride": [
+          1
+        ],
+        "device": "cuda:3",
+        "is_contiguous": true
+      },
+      "suffix_kv_lens": null,
+      "use_cascade": false
+    }
+  }
+}
+{
+  "probe": "save_kv_layer.kwargs",
+  "data": {
+    "type": "dict",
+    "keys": []
+  }
+}

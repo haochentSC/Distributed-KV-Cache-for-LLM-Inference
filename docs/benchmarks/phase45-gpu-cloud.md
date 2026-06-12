@@ -1,9 +1,9 @@
-# Phase 4.5-B — RunPod GPU-cloud window (Session A executed 2026-06-11; Session B pending)
+# Phase 4.5-B — RunPod GPU-cloud window (Session A executed 2026-06-11; Session B executed 2026-06-12)
 
 The RunPod paid window from [`runpod-runbook.md`](runpod-runbook.md) / [`runpod-gpu-window-plan.md`](runpod-gpu-window-plan.md).
 **Session A** (1× A100 80 GB, long-context curve + serving demo) ran end-to-end. **Session B**
-(4× A6000/A40, TP=4 / Qwen2.5-32B keying validation) is the next session — see the handoff section
-at the bottom of the plan doc.
+(4× A40, TP=4 / Qwen2.5-32B keying validation) ran 2026-06-12 — and caught a real server-side
+keying bug (ADR 0035) before validating clean. See the Session B section at the bottom.
 
 Total Session A wall time ≈ **2 h** on pod `fu7bdllghlfssu`; spend ≈ **$3–4** (A100 secure cloud,
 on-demand). **Terminate the pod in the RunPod console when done** — `runpodctl` was not configured
@@ -90,8 +90,48 @@ connector works under the OpenAI-compatible server; TTFT numbers are **not** the
 4. **A100 prefill is too fast for this connector path** at 7B/14B; the warm bottleneck is the Python
    deserialize + GPU copy hot path (same family as ADR 0031), not gRPC RTT on loopback.
 
-## Next session (Session B — handoff)
+## Session B — TP=4 / Qwen2.5-32B keying validation (executed 2026-06-12)
 
-See [`runpod-gpu-window-plan.md`](runpod-gpu-window-plan.md) § “Next session handoff”. Deliverable:
-`phase45-tp4-qwen32b.json` + TP=4 probe dump proving distinct `shard_model_id` per rank (ADR 0032).
-**Terminate the Session B pod immediately after.**
+**Environment:** 4× NVIDIA A40 46 GB (PCIe, no NVLink — custom allreduce disabled, NCCL-over-PCIe;
+fine, this session validates keying correctness, not TP throughput), Secure Cloud,
+**PyTorch 2.9 / CUDA 13.0 template** (see findings — the first pod, on the plain PyTorch template,
+had a CUDA 12.7 driver that could not load the cu130 torch that vLLM 0.22.1 pulls in). 100 GB
+container disk; conda at `/opt/conda` (no PEP 668 — plain `pip install`). Wall time ≈ 1.5 h
+including the bug hunt; ≈ $3–4.
+
+**Probe gate (passed):** `tp_world=4`, ranks 0–3 each dumped once on their own device, per-rank KV
+shape `[2, 22900, 16, 2, 128]` = **2 KV heads/rank** (Qwen2.5-32B's 8 ÷ 4), `block_axis=1`
+unchanged. Dump: [`runpod-tp4-kv-layout-probe.json`](runpod-tp4-kv-layout-probe.json).
+
+**The gate then caught a real bug.** First benchmark run: save active on all 4 ranks but `load path
+active` on rank 0 only; server hit:miss exactly **1:3**; a presence probe showed every block stored
+under ONE shard key with versions in multiples of 4. Root cause (server, not connector): the store
+map was keyed by **block hash alone** with `model_id` as a guarded metadata field — and ADR 0032
+deliberately keeps block hashes rank-agnostic, so all four `model#tpR/4` shard ids collided on the
+same map slot, last-writer-wins. Worse than a miss: a rank's fetch could return **another rank's
+shard bytes** (the stamped hash matches, so the ADR 0016 guard passes). Fix: namespace the store key
+by model (`storeKey = SHA-256(model_id ‖ wire hash)`), keep the wire hash on the entry for
+spill/replication. **ADR 0035.** Single-model runs (every prior benchmark) were unaffected.
+
+**Validation on the fixed server (the deliverable):** `[kvc] load path active` on **all four
+ranks**; batch_fetch **9,280 hits / 0 misses**; **512 writes = 128 blocks × 4 ranks exactly once**;
+the only lookup misses are the cold pass. Zero correctness warnings. The TP keying
+(`shard_model_id`, ADR 0032) is validated end-to-end on real tensor-parallel hardware.
+
+TTFT (secondary — A40 prefill is fast and the warm path is the known Python-bound hot path,
+ADR 0031): warm vs baseline −40.1% @ 269 tok, −51.6% @ 525, −24.7% @ 1,038, −32.0% @ 2,062.
+JSON: [`phase45-tp4-qwen32b.json`](phase45-tp4-qwen32b.json).
+
+### Findings (Session B)
+
+1. **Template CUDA version is a hard gate on RunPod.** vLLM 0.22.1 pulls `torch 2.11.0+cu130`,
+   which needs a CUDA ≥ 13.0 *driver* on the host. The plain "RunPod PyTorch" template landed on a
+   12.7-driver host (engine init fails: "NVIDIA driver too old"); redeploying with the
+   **PyTorch 2.9 / CUDA 13.0** template fixed it. The driver is host-level — not fixable in-container.
+2. **SSH key injection is template-dependent**: the CUDA-13 template did not inject the account SSH
+   key; it had to be appended to `authorized_keys` via the Web Terminal (which force-wraps pasted
+   lines ~80 cols — split long lines into shell variables).
+3. **The probe-gate philosophy paid for itself**: the lockstep invariant ("rank-0 presence stands in
+   for all ranks") let the scheduler claim hits that three ranks could not serve, silently — only
+   the per-rank server metrics (1:3 hit:miss) and a shard-presence probe
+   (`connector/tools/diag_shard_presence.py`, kept) exposed it. "Zero warnings" ≠ correct under TP.

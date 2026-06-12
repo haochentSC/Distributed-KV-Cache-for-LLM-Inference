@@ -1,9 +1,9 @@
 name: CI
 
+# Solo repo: run on every push (any branch). PRs from the same repo are covered by the
+# branch push; add a pull_request trigger if forks ever contribute.
 on:
   push:
-    branches: [main]
-  pull_request:
 
 permissions:
   contents: read

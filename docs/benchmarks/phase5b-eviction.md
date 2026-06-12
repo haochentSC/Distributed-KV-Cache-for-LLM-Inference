@@ -38,6 +38,10 @@ run-to-run jitter that made a single seed's mid-curve non-monotonic). Reproduce:
 
 ## Results (block hit rate, mean of 3 seeds; 2026-06-07)
 
+![Efficiency vs fairness Pareto frontier](../img/fairness-frontier.png)
+
+(Regenerate: `make plots`; data: [`phase5b-frontier.csv`](phase5b-frontier.csv).)
+
 | Config                    | Overall (efficiency) | A (cheap) | B (expensive) | C (bursty) | **min-tenant (fairness)** |
 |---------------------------|:--:|:--:|:--:|:--:|:--:|
 | LRU baseline              | 14.5% | 14.6% | 14.7% | 10.0% | 10.0% |

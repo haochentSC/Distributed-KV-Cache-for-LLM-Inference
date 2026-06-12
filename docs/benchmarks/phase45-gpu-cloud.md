@@ -71,6 +71,23 @@ connector works under the OpenAI-compatible server; TTFT numbers are **not** the
 `[kvc] save/load path active` under serve; byte-identical outputs across requests. Framing: loopback
 = transport best case; AWS cross-AZ L4 = conservative bound for where the cache *wins*.
 
+## Which harness produced which number (provenance — interviewers ask)
+
+Three harnesses, three questions:
+
+| Harness | What it drives | What it measures | Numbers it owns |
+|---|---|---|---|
+| `loadgen` (Go, gRPC, **no GPU/vLLM**) | synthetic + **ShareGPT trace replay** | the cache *service*: hit rate, correctness, latency | AWS 32.7% hit rate, 0 violations, p50 62 ms; all chaos + 5a/5b runs |
+| `run_distributed_benchmark.py` (real vLLM) | **synthetic `system_prompt`** prefixes (fixed shared prefix × N + unique suffix, real tokenizer) | end-to-end TTFT, baseline vs connector | AWS L4 **+10.9% @ 4k**; every RunPod curve (Sessions A + B) |
+| `demo_serve_client.py` (OpenAI API vs `vllm serve`) | same workload blocks as the driver | integration proof under the real server | Session A demo table |
+
+The TTFT numbers are **synthetic-prefix** by design (sweeping the crossover needs exact prefix-length
+control); the **realistic-workload** evidence (ShareGPT) exists at the cache-service level only. They
+compose — ShareGPT says 32.7% of blocks come from cache under real conversation reuse; the synthetic
+curve prices what a hit is worth per prefix length — but end-to-end TTFT *under ShareGPT replay
+through vLLM* was never measured (would need a longer paid GPU window driving traces through the
+serve endpoint). Say it that way; don't conflate the two.
+
 ## Resume / interview framing (honest)
 
 - **Measured TTFT win (keep):** AWS distributed run, L4, cross-AZ → **+10.9% @ 4k tokens**

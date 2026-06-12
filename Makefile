@@ -2,7 +2,7 @@ GOPATH_BIN := $(shell go env GOPATH)/bin
 export PATH := $(PATH):$(GOPATH_BIN)
 MODULE := github.com/haochentSC/distributed-kv-cache
 
-.PHONY: tools proto proto-go proto-python build test vet fmt run-server run-loadgen tidy
+.PHONY: tools proto proto-go proto-python build test vet fmt run-server run-loadgen tidy demo plots
 
 tools: ## install the protoc Go plugins
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
@@ -41,3 +41,9 @@ run-server: ## run the cache server
 
 run-loadgen: ## run the synthetic load generator
 	go run ./cmd/loadgen
+
+demo: ## 3-node local cluster + verified load + node kills (0 violations or non-zero exit)
+	sh scripts/demo-chaos.sh
+
+plots: ## regenerate docs/img/*.png from the committed benchmark JSONs
+	python scripts/plots/make_all.py

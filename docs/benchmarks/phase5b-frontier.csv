@@ -1,0 +1,8 @@
+config,overall_hit_rate_pct,tenant_a_pct,tenant_b_pct,tenant_c_pct,min_tenant_pct
+LRU baseline,14.5,14.6,14.7,10.0,10.0
+gdsf static-cap (5a),12.2,16.8,10.3,12.2,10.3
+gdsf-elastic w=0,20.0,1.9,28.7,3.2,1.9
+gdsf-elastic w=0.25,14.4,16.8,13.6,12.3,12.3
+gdsf-elastic w=0.5,14.0,17.8,12.7,10.6,10.6
+gdsf-elastic w=0.75,14.2,17.9,12.7,12.3,12.3
+gdsf-elastic w=1,14.2,18.2,12.8,11.4,11.4

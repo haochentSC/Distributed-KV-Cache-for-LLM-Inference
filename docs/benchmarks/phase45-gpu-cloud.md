@@ -25,6 +25,8 @@ on the box.
 
 ## Headline: long-context TTFT curve (Qwen2.5-7B, system_prompt, p50 of 8 runs)
 
+![No crossover on A100](../img/longcontext-a100.png)
+
 | repeats | prompt tokens | baseline p50 | warm p50 | warm vs baseline |
 |---:|---:|---:|---:|---:|
 | 16  | 1,038  | 75 ms   | 204 ms  | **−171 %** |

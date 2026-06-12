@@ -1,0 +1,86 @@
+name: CI
+
+# Solo repo: run on every push (any branch). PRs from the same repo are covered by the
+# branch push; add a pull_request trigger if forks ever contribute.
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go (build, gofmt, vet, race tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted:" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Tests (race detector)
+        run: go test ./... -race
+
+  python-connector:
+    name: Python connector (pytest, CPU)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install connector + CPU torch
+        working-directory: connector
+        run: |
+          pip install -e ".[dev]"
+          # CPU-only wheel so the blockio tensor tests run; vLLM itself stays GPU-only.
+          # numpy explicitly: the bare torch wheel doesn't pull it, and tensor.numpy()
+          # raises "Numpy is not available" without it.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy
+
+      - name: pytest
+        working-directory: connector
+        run: pytest -v
+
+  terraform:
+    name: Terraform (fmt, validate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive terraform
+
+      - name: validate cluster
+        working-directory: terraform/cluster
+        run: |
+          terraform init -backend=false
+          terraform validate
+
+      - name: validate bootstrap
+        working-directory: terraform/bootstrap
+        run: |
+          terraform init -backend=false
+          terraform validate

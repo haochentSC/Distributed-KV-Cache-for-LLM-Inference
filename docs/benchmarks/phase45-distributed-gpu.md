@@ -19,6 +19,8 @@ The single paid AWS window from `aws-batch-runbook.md`, executed end-to-end. Tot
 
 ## Headline: TTFT vs shared-prefix length (system_prompt workload, p50 of 8 runs)
 
+![TTFT crossover on AWS L4](../img/ttft-crossover-l4.png)
+
 | repeats | prompt tokens | baseline p50 | warm p50 | warm vs baseline |
 |---:|---:|---:|---:|---:|
 | 4  | 269   | 104.4 ms  | 110.0 ms | **-5.3 %** |

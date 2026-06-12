@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KV-cache chat demo</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; background:#16181d; color:#e6e6e6;
+         max-width: 760px; margin: 0 auto; padding: 1rem; }
+  h1 { font-size: 1.1rem; } h1 small { color:#9aa; font-weight: normal; }
+  #chat { display:flex; flex-direction:column; gap:.6rem; margin:1rem 0; }
+  .msg { padding:.55rem .8rem; border-radius:10px; white-space:pre-wrap; }
+  .user { background:#26415e; align-self:flex-end; max-width:85%; }
+  .assistant { background:#23262e; align-self:flex-start; max-width:95%; }
+  .meta { font-size:.78rem; color:#9aa; margin:-.3rem 0 0 .2rem; align-self:flex-start;
+          display:flex; gap:.5rem; align-items:center; }
+  .badge { padding:.05rem .5rem; border-radius:99px; font-weight:600; }
+  .hit  { background:#143d2b; color:#4ade80; border:1px solid #4ade80; }
+  .miss { background:#3d2b14; color:#fbbf24; border:1px solid #fbbf24; }
+  .off  { background:#333;    color:#999;    border:1px solid #666; }
+  form { display:flex; gap:.5rem; }
+  input { flex:1; padding:.6rem; border-radius:8px; border:1px solid #444; background:#1e2128; color:inherit; }
+  button { padding:.6rem 1rem; border-radius:8px; border:0; background:#3b82f6; color:white; cursor:pointer; }
+  button.secondary { background:#374151; }
+  button:disabled { opacity:.5; cursor:default; }
+</style>
+</head>
+<body>
+<h1>Distributed KV cache — chat demo
+  <small>per-turn TTFT + cache-hit badge. Send a conversation, then <b>Replay</b> it: every
+  replayed turn should light up <span class="badge hit">KV cache hit</span> and stream sooner.</small>
+</h1>
+<div id="chat"></div>
+<form id="form">
+  <input id="box" placeholder="Say something…" autocomplete="off" autofocus>
+  <button id="send">Send</button>
+  <button id="replay" class="secondary" type="button" disabled>Replay conversation</button>
+  <button id="reset" class="secondary" type="button">Reset</button>
+</form>
+
+<script>
+const chat = document.getElementById("chat");
+const box = document.getElementById("box");
+const form = document.getElementById("form");
+const replayBtn = document.getElementById("replay");
+const resetBtn = document.getElementById("reset");
+
+let messages = [];      // OpenAI-style history sent to the model
+let transcript = [];    // user turns only, for Replay
+let busy = false;
+
+function bubble(cls, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + cls;
+  div.textContent = text;
+  chat.appendChild(div);
+  div.scrollIntoView({ block: "end" });
+  return div;
+}
+
+function metaLine(ttftMs, stats) {
+  const div = document.createElement("div");
+  div.className = "meta";
+  let badge;
+  if (!stats || !stats.metrics_reachable) {
+    badge = `<span class="badge off">cache metrics unreachable</span>`;
+  } else if (stats.fetch_hits > 0) {
+    badge = `<span class="badge hit">KV cache hit · ${stats.fetch_hits} blocks</span>`;
+  } else {
+    badge = `<span class="badge miss">cold · ${stats.fetch_misses + stats.lookup_misses} misses</span>`;
+  }
+  div.innerHTML = `<span>TTFT ${ttftMs.toFixed(0)} ms</span>${badge}`;
+  chat.appendChild(div);
+}
+
+async function sendTurn(userText) {
+  busy = true; setButtons();
+  bubble("user", userText);
+  messages.push({ role: "user", content: userText });
+
+  const out = bubble("assistant", "");
+  const t0 = performance.now();
+  let ttft = null, stats = null, reply = "";
+
+  const resp = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line.startsWith("data:")) continue;
+      const payload = line.slice(5).trim();
+      if (payload === "[DONE]") continue;
+      let obj;
+      try { obj = JSON.parse(payload); } catch { continue; }
+      if (obj.kvcache_demo) { stats = obj.kvcache_demo; continue; }
+      const piece = obj.choices?.[0]?.delta?.content ?? "";
+      if (piece) {
+        if (ttft === null) ttft = performance.now() - t0;
+        reply += piece;
+        out.textContent = reply;
+      }
+    }
+  }
+  messages.push({ role: "assistant", content: reply });
+  metaLine(ttft ?? performance.now() - t0, stats);
+  busy = false; setButtons();
+}
+
+function setButtons() {
+  document.getElementById("send").disabled = busy;
+  replayBtn.disabled = busy || transcript.length === 0;
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = box.value.trim();
+  if (!text || busy) return;
+  box.value = "";
+  transcript.push(text);
+  await sendTurn(text);
+});
+
+replayBtn.addEventListener("click", async () => {
+  if (busy) return;
+  // Same conversation from scratch: the model's context is rebuilt turn by turn, so every
+  // prefill should be served from the distributed cache written on the first pass.
+  messages = [];
+  chat.appendChild(Object.assign(document.createElement("hr")));
+  for (const text of transcript) await sendTurn(text);
+});
+
+resetBtn.addEventListener("click", () => {
+  messages = []; transcript = []; chat.innerHTML = ""; setButtons();
+});
+</script>
+</body>
+</html>

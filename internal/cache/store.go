@@ -1,11 +1,31 @@
 package cache
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"sync"
 	"sync/atomic"
 	"time"
 )
+
+// storeKey derives the in-memory map key from (model, wire hash). The wire hash is
+// deliberately model/rank-agnostic on the client (ADR 0032's lockstep invariant: every
+// tensor-parallel rank hashes the same token chain), so distinct model_ids — in
+// particular the per-rank shard ids "model#tpR/W" — MUST be part of the key, or N ranks
+// writing the same block clobber one map slot last-writer-wins (the Session B TP=4 bug:
+// only the last rank's shard survived, every other rank's fetch missed, and a fetch
+// could even return ANOTHER rank's bytes since the stamped hash matches). Mixing the
+// model into the key makes the namespaces disjoint. Everything outward-facing —
+// replication, the cold tier, routing — still speaks (model_id, wire hash); the wire
+// hash is preserved on the Entry (WireHash) for those paths.
+func storeKey(model string, h BlockHash) BlockHash {
+	d := sha256.New()
+	d.Write([]byte(model))
+	d.Write(h[:])
+	var out BlockHash
+	copy(out[:], d.Sum(nil))
+	return out
+}
 
 // Store is a single in-memory cache shard.
 //
@@ -205,16 +225,17 @@ func (s *Store) stripeFor(h BlockHash) *stripe {
 // immutable per Entry's concurrency contract, so it is safe to read after the lock is
 // released. A model mismatch is treated as a miss (ADR 0016 hit-verification guard).
 func (s *Store) Get(model string, h BlockHash) (*Entry, bool) {
-	st := s.stripeFor(h)
+	k := storeKey(model, h)
+	st := s.stripeFor(k)
 	st.mu.RLock()
 	defer st.mu.RUnlock()
 
-	e, ok := st.m[h]
-	if !ok || e.ModelID != model {
+	e, ok := st.m[k]
+	if !ok || e.ModelID != model { // model re-check: defense-in-depth (key already namespaces it)
 		return nil, false
 	}
 	e.recordAccess(s.now()) // atomic — safe under the shared read lock
-	s.policy.RecordAccess(h)
+	s.policy.RecordAccess(k)
 	return e, true
 }
 
@@ -223,11 +244,12 @@ func (s *Store) Get(model string, h BlockHash) (*Entry, bool) {
 // policy relies on (ADR 0011 keeps Lookup metadata-only). The returned *Entry is
 // immutable.
 func (s *Store) Peek(model string, h BlockHash) (*Entry, bool) {
-	st := s.stripeFor(h)
+	k := storeKey(model, h)
+	st := s.stripeFor(k)
 	st.mu.RLock()
 	defer st.mu.RUnlock()
 
-	e, ok := st.m[h]
+	e, ok := st.m[k]
 	if !ok || e.ModelID != model {
 		return nil, false
 	}
@@ -247,14 +269,15 @@ func (s *Store) Put(h BlockHash, e *Entry) uint64 {
 	if e == nil {
 		return 0
 	}
-	st := s.stripeFor(h)
+	k := storeKey(e.ModelID, h)
+	st := s.stripeFor(k)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
 	version := uint64(1)
 	created := s.now()
 	var prevSize int64 // bytes the overwritten entry occupied (0 on first write)
-	if prev, ok := st.m[h]; ok {
+	if prev, ok := st.m[k]; ok {
 		version = prev.Version + 1
 		created = prev.CreatedAt // preserve original creation time across overwrites
 		prevSize = prev.SizeBytes
@@ -264,14 +287,15 @@ func (s *Store) Put(h BlockHash, e *Entry) uint64 {
 		TokenIDs:      e.TokenIDs,
 		KV:            e.KV,
 		ModelID:       e.ModelID,
+		WireHash:      h, // outward identity for spill/replication (see storeKey)
 		Version:       version,
 		SizeBytes:     int64(len(e.KV)),
 		TenantID:      e.TenantID,
 		RecomputeCost: e.RecomputeCost,
 		CreatedAt:     created,
 	}
-	st.m[h] = stored
-	s.policy.RecordWrite(WriteMeta{Key: h, TenantID: stored.TenantID, Size: stored.SizeBytes, Cost: stored.RecomputeCost})
+	st.m[k] = stored
+	s.policy.RecordWrite(WriteMeta{Key: k, TenantID: stored.TenantID, Size: stored.SizeBytes, Cost: stored.RecomputeCost})
 
 	// Account for the DELTA this write moved the resident size by: on a first write prevSize is
 	// 0 so we add the whole entry; on an overwrite we add only (new - prev), which is negative
@@ -300,13 +324,14 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 		// missing field doesn't quietly install an entry under a sentinel version.
 		return 0
 	}
-	st := s.stripeFor(h)
+	k := storeKey(e.ModelID, h)
+	st := s.stripeFor(k)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
 	created := s.now()
 	var prevSize int64 // bytes the superseded entry occupied (0 if none)
-	if prev, ok := st.m[h]; ok {
+	if prev, ok := st.m[k]; ok {
 		if prev.Version >= version {
 			// Stale or duplicate delivery — keep the newer (or equal) local copy. Last-writer-
 			// wins is fine for eventually-consistent cache data (ADR 0013), but only when
@@ -321,14 +346,15 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 		TokenIDs:      e.TokenIDs,
 		KV:            e.KV,
 		ModelID:       e.ModelID,
+		WireHash:      h,       // outward identity for spill/replication (see storeKey)
 		Version:       version, // authoritative — assigned by the primary, NOT minted here
 		SizeBytes:     int64(len(e.KV)),
 		TenantID:      e.TenantID,
 		RecomputeCost: e.RecomputeCost,
 		CreatedAt:     created,
 	}
-	st.m[h] = stored
-	s.policy.RecordWrite(WriteMeta{Key: h, TenantID: stored.TenantID, Size: stored.SizeBytes, Cost: stored.RecomputeCost})
+	st.m[k] = stored
+	s.policy.RecordWrite(WriteMeta{Key: k, TenantID: stored.TenantID, Size: stored.SizeBytes, Cost: stored.RecomputeCost})
 
 	// Same accounting as Put — replication writes count toward the byte budget too, so a replica
 	// can hit its own watermark and evict independently of the primary (fine: cache data is
@@ -341,24 +367,25 @@ func (s *Store) PutWithVersion(h BlockHash, e *Entry, version uint64) uint64 {
 // Delete removes (model, h) and reports whether it was present, recording an eviction
 // on a hit. A model mismatch is a no-op miss.
 func (s *Store) Delete(model string, h BlockHash) bool {
-	st := s.stripeFor(h)
+	k := storeKey(model, h)
+	st := s.stripeFor(k)
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	e, ok := st.m[h]
+	e, ok := st.m[k]
 	if !ok || e.ModelID != model {
 		return false
 	}
-	delete(st.m, h)
-	s.policy.RecordEvict(h)
+	delete(st.m, k)
+	s.policy.RecordEvict(k)
 	s.totalBytes.Add(-e.SizeBytes) // a deleted entry frees its bytes; no signalEvict — freeing
 	return true                    // never creates pressure, only relieves it
 }
 
-// evict removes a block by hash REGARDLESS of model and returns the bytes it freed (0 if it
-// was already gone). This is the INTERNAL memory-pressure path used only by the Evictor —
-// unlike Delete (the RPC path) there is no model check, because the policy named a raw hash
-// and within a shard a hash maps to exactly one entry.
+// evict removes a block by INTERNAL store key (see storeKey — already model-namespaced) and
+// returns the bytes it freed (0 if it was already gone). This is the INTERNAL memory-pressure
+// path used only by the Evictor — unlike Delete (the RPC path) there is no model check,
+// because the policy named a store key and a store key maps to exactly one entry.
 //
 // Lock order (read this before implementing): stripe lock FIRST, and RecordEvict (called here)
 // re-enters the LRU's own lock — so the order is stripe -> lru, matching Get and Put. The
@@ -380,8 +407,9 @@ func (s *Store) evict(h BlockHash) int64 {
 		// RecordEvict call below. This is the ONLY eviction path that spills: it carries both
 		// memory-pressure victims (evictOne) and TTL-swept idle entries (sweepIdle). The explicit
 		// Evict RPC goes through Delete, which does NOT spill — a client deleting a block means
-		// "remove it", not "move it to cold".
-		s.spill(e.ModelID, h, e.Version, e.TokenIDs, e.KV)
+		// "remove it", not "move it to cold". Spill under the WIRE hash, not the internal map
+		// key (h here) — the cold tier is keyed by (model, wire hash) so read-through matches.
+		s.spill(e.ModelID, e.WireHash, e.Version, e.TokenIDs, e.KV)
 	}
 	delete(st.m, h)
 	s.totalBytes.Add(-e.SizeBytes)

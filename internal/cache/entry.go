@@ -24,13 +24,14 @@ type BlockHash [32]byte
 //     therefore update it at once, so it must be atomic, not plain fields
 //     (review "Bug 1": mutating a plain field under RLock is a data race).
 type Entry struct {
-	TokenIDs      []int32 // for hit verification / hash-collision guard
-	KV            []byte  // serialized K and V for all layers/heads of this block
-	ModelID       string  // KV cache is model-specific
-	Version       uint64  // bumped on overwrite
-	SizeBytes     int64   // len(KV); cached for accounting
-	TenantID      string  // Phase 5 (fairness)
-	RecomputeCost float64 // Phase 5 (cost-aware eviction)
+	TokenIDs      []int32   // for hit verification / hash-collision guard
+	KV            []byte    // serialized K and V for all layers/heads of this block
+	ModelID       string    // KV cache is model-specific
+	WireHash      BlockHash // the client's block hash; the map key namespaces it by model (storeKey)
+	Version       uint64    // bumped on overwrite
+	SizeBytes     int64     // len(KV); cached for accounting
+	TenantID      string    // Phase 5 (fairness)
+	RecomputeCost float64   // Phase 5 (cost-aware eviction)
 	CreatedAt     time.Time
 
 	accessCount  atomic.Uint64 // Phase 5 frequency signal; atomic (updated under RLock)

@@ -65,6 +65,60 @@ func TestStore_GetWrongModel(t *testing.T) {
 	}
 }
 
+// TestStore_SameHashDistinctModels is the ADR 0035 regression: tensor-parallel shard ids
+// ("model#tpR/W", ADR 0032) deliberately share rank-agnostic block hashes, so entries for
+// the SAME hash under DIFFERENT models must coexist — not clobber last-writer-wins. The
+// Session B TP=4 run caught exactly this in the wild: only the last rank's shard survived.
+func TestStore_SameHashDistinctModels(t *testing.T) {
+	s := NewStore(nil)
+	h := hashByte(4)
+	models := []string{"qwen#tp0/4", "qwen#tp1/4", "qwen#tp2/4", "qwen#tp3/4"}
+
+	// Every rank writes its own shard under the SAME wire hash.
+	for _, m := range models {
+		if ver := s.Put(h, &Entry{ModelID: m, KV: []byte("shard-of-" + m)}); ver != 1 {
+			t.Fatalf("Put(%s) version = %d, want 1 (a fresh namespace, not an overwrite)", m, ver)
+		}
+	}
+
+	// Every rank reads back its OWN bytes — no clobbering, no cross-shard serve.
+	for _, m := range models {
+		e, ok := s.Get(m, h)
+		if !ok {
+			t.Fatalf("Get(%s) missed; another model's write clobbered the entry", m)
+		}
+		if want := "shard-of-" + m; string(e.KV) != want {
+			t.Fatalf("Get(%s) returned %q, want %q (another rank's shard bytes!)", m, e.KV, want)
+		}
+		if e.WireHash != h {
+			t.Fatalf("Get(%s).WireHash = %x, want the wire hash %x", m, e.WireHash, h)
+		}
+	}
+
+	// Overwriting one model's entry leaves the others' versions and bytes untouched.
+	if ver := s.Put(h, &Entry{ModelID: models[0], KV: []byte("updated")}); ver != 2 {
+		t.Fatalf("overwrite Put version = %d, want 2", ver)
+	}
+	for _, m := range models[1:] {
+		if e, ok := s.Get(m, h); !ok || e.Version != 1 {
+			t.Fatalf("Get(%s) after sibling overwrite: ok=%v version=%d, want ok v1", m, ok, e.Version)
+		}
+	}
+
+	// Deleting one model's entry leaves the others present.
+	if !s.Delete(models[1], h) {
+		t.Fatal("Delete(tp1) should remove tp1's entry")
+	}
+	if _, ok := s.Get(models[1], h); ok {
+		t.Fatal("Get(tp1) after Delete should miss")
+	}
+	for _, m := range []string{models[0], models[2], models[3]} {
+		if _, ok := s.Get(m, h); !ok {
+			t.Fatalf("Get(%s) should survive a sibling Delete", m)
+		}
+	}
+}
+
 func TestStore_Delete(t *testing.T) {
 	s := NewStore(nil)
 	h := hashByte(3)

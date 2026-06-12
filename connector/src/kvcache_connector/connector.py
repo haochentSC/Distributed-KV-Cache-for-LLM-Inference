@@ -116,6 +116,7 @@ class DistributedKVConnector(KVConnectorBase_V1):
         # rank is now resolvable. Each rank holds its own KV-head shard (the registered
         # tensors are already this rank's slice), and writes/reads it under its own key.
         self.tp_rank = _tp_rank()
+        self._warn_once("rank_resolved", f"register_kv_caches: resolved tp_rank={self.tp_rank}/{self.tp_world}")
         self._init_layout()
         if self.probe:
             self._probe_layout()
@@ -293,6 +294,7 @@ class DistributedKVConnector(KVConnectorBase_V1):
         t0 = time.perf_counter()
         # This rank loads its OWN KV-head shard, keyed by its rank (see shard_model_id).
         shard_id = shard_model_id(model_id, self.tp_rank, self.tp_world)
+        self._warn_once("load_key", f"load shard key: {shard_id} (tp_rank={self.tp_rank}/{self.tp_world})")
         payloads = self.client.batch_fetch(shard_id, blocks, plan["versions"])
         t_fetch = time.perf_counter() - t0
 
@@ -342,6 +344,7 @@ class DistributedKVConnector(KVConnectorBase_V1):
         model_id = plan["model_id"]
         # This rank saves its OWN KV-head shard, keyed by its rank (see shard_model_id).
         shard_id = shard_model_id(model_id, self.tp_rank, self.tp_world)
+        self._warn_once("save_key", f"save shard key: {shard_id} (tp_rank={self.tp_rank}/{self.tp_world})")
         for j, raw_block in enumerate(plan["save_blocks"]):
             logical = save_start + j
             if logical >= len(row):

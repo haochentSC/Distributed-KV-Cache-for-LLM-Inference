@@ -182,7 +182,7 @@ go run ./cmd/loadgen -multitenant -verify
 ```
 
 The full cluster (3 nodes + etcd + replication + failover) runs locally too — `make demo` spins it
-up, runs verified traffic, and kills a node mid-run (see Demo below) — and on AWS via
+up, runs verified traffic, and kills a node mid-run (see the demo above) — and on AWS via
 `terraform apply` ([`terraform/`](terraform/), [`docs/05-cloud-deployment-aws.md`](docs/05-cloud-deployment-aws.md)).
 Build gates: `go build ./...`, `go test ./... -race`, `gofmt -l .`, `go vet ./...` (CI enforces all four).
 

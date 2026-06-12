@@ -51,8 +51,15 @@ last-writer-wins (silent-corruption risk: the stamped hash matches across ranks,
 passes while serving another rank's shard). **Fixed (ADR 0035):** store keys namespaced by model
 (`storeKey = SHA-256(model_id ‖ wire hash)`; `Entry.WireHash` kept for spill/replication), re-validated
 on hardware — load/save active on all 4 ranks, 9,280 hits / 0 misses, 512 writes = 128 blocks × 4 ranks
-exactly once. TP keying (ADR 0032) validated end-to-end. **Next: Phase 6 (polish & story).**
-**AWS cluster DESTROYED; all RunPod pods TERMINATED.**
+exactly once. TP keying (ADR 0032) validated end-to-end. **AWS cluster DESTROYED; all RunPod pods
+TERMINATED.** **Phase 6 (polish & story) EXECUTED 2026-06-12**, branch `phase6-polish`: README rewritten
+around the measured results (mermaid architecture, prior-art vs LMCache/Dynamo/Mooncake, ADR 0035 war
+story, limitations); CI (`.github/workflows/ci.yml`) + badges; plots (`make plots` → `docs/img/`);
+`make demo` 3-node chaos demo + README GIF; `demo/chat-ui/` (TTFT + ground-truth cache-hit badge via
+Prometheus deltas; on the 3080 needs `VLLM_USE_FLASHINFER_SAMPLER=0 --enforce-eager`, verified: replay
+pass = fetch hits every turn); blog draft `docs/blog/efficiency-vs-fairness-frontier.md` (HC edits +
+publishes); `docs/06-resume-and-interview.md` (measured numbers, supersedes plan §7 hypotheticals).
+**Remaining: HC reviews/merges the branch, publishes the blog post.**
 
 <!-- Keep this file < ~200 lines: it loads every session. Always-true rules only.
      Topic/path-specific guidance → .claude/rules/. Deep procedures → Skills (.claude/skills/). -->

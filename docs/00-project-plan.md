@@ -415,6 +415,12 @@ This phase is split so a partial result still ships (see Section 3.5 scoping):
 
 ### Phase 6 — Polish and Story (Weeks 21–22, optional 23–24)
 
+> **Status (2026-06-12): EXECUTED**, branch `phase6-polish`. README rewritten with measured results +
+> prior-art section; CI + badges; benchmark plots; `make demo` chaos GIF; chat-UI demo with a
+> ground-truth cache-hit badge (verified on the local 3080); blog post drafted
+> (`docs/blog/efficiency-vs-fairness-frontier.md` — HC edits + publishes); resume bullets / interview
+> prep finalized in `docs/06-resume-and-interview.md` (supersedes the hypothetical numbers in §7).
+
 **Goal:** Convert this into a resume artifact and interview anchor.
 
 - Write a README that explains the project, the architecture, and the results, with diagrams (include the cloud topology + a `terraform apply` quickstart)

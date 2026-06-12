@@ -53,7 +53,10 @@ jobs:
         run: |
           pip install -e ".[dev]"
           # CPU-only wheel so the blockio tensor tests run; vLLM itself stays GPU-only.
+          # numpy explicitly: the bare torch wheel doesn't pull it, and tensor.numpy()
+          # raises "Numpy is not available" without it.
           pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy
 
       - name: pytest
         working-directory: connector
